@@ -35,6 +35,46 @@ class TestIndividualOpcodes:
         self.emulator.opcode_if_not_equal(bytes.fromhex("3698"))
         assert self.emulator.program_counter == 2, "Next instruction was not skipped when it should have been."
 
+    def test_opcode_if_register_equal(self):
+        assert self.emulator.program_counter == 0, "Program counter starting at an unexpected value."
+
+        self.emulator.registers[10] = int("11", 16)
+        self.emulator.registers[4] = int("12", 16)
+        self.emulator.opcode_if_register_equal(bytes.fromhex("5a40"))
+        assert self.emulator.program_counter == 0, "Program counter was changed despite register value matching."
+
+        self.emulator.registers[10] = int("40", 16)
+        self.emulator.registers[4] = int("40", 16)
+        self.emulator.opcode_if_register_equal(bytes.fromhex("5a40"))
+        assert self.emulator.program_counter == 2, "Next instruction was not skipped when it should have been."
+
+    def test_opcode_set_register_value(self):
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        self.emulator.opcode_set_register_value(bytes.fromhex("6133"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 1:
+                assert register == int("33", 16), "Register not set to correct value."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+    def test_opcode_add_value(self):
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        self.emulator.registers[11] = 10
+        self.emulator.opcode_add_value(bytes.fromhex("7b05"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 11:
+                assert register == 15, "Register addition failed."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+        self.emulator.opcode_add_value(bytes.fromhex("7bfa"))
+        assert self.emulator.registers[11] == 9, "Register addition overflow did not work as expected."
+        assert self.emulator.registers[15] == 0, "Carry bit was set when it should not be modified by this instruction."
+
 
 class TestOpcodeRouting:
     @classmethod
@@ -64,4 +104,22 @@ class TestOpcodeRouting:
     def test_if_not_equal(self, mock_method):
         opcode = bytes.fromhex("432a")
         bad_opcode = bytes.fromhex("132a")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_if_register_equal")
+    def test_if_register_equal(self, mock_method):
+        opcode = bytes.fromhex("5320")
+        bad_opcode = bytes.fromhex("5321")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_set_register_value")
+    def test_set_register_value(self, mock_method):
+        opcode = bytes.fromhex("6133")
+        bad_opcode = bytes.fromhex("5321")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_add_value")
+    def test_add_value(self, mock_method):
+        opcode = bytes.fromhex("7433")
+        bad_opcode = bytes.fromhex("6133")
         self.run_opcode(opcode, bad_opcode, mock_method)
