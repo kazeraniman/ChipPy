@@ -1,6 +1,6 @@
 from unittest import mock
 
-from src.emulator import Emulator
+from src.emulator import Emulator, GAME_START_ADDRESS
 
 
 class TestIndividualOpcodes:
@@ -8,45 +8,45 @@ class TestIndividualOpcodes:
         self.emulator = Emulator()
 
     def test_opcode_goto(self):
-        assert self.emulator.program_counter == 0, "Program counter starting at an unexpected value."
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
 
         self.emulator.opcode_goto(bytes.fromhex("14e5"))
         assert self.emulator.program_counter == int("4e5", 16), "Program counter incorrect after jump opcode."
 
     def test_opcode_if_equal(self):
-        assert self.emulator.program_counter == 0, "Program counter starting at an unexpected value."
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
         assert self.emulator.registers[6] == 0, "Register starting at an unexpected value."
 
         self.emulator.opcode_if_equal(bytes.fromhex("3698"))
-        assert self.emulator.program_counter == 0, "Program counter was changed despite register value not matching."
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register value not matching."
 
         self.emulator.registers[6] = int("98", 16)
         self.emulator.opcode_if_equal(bytes.fromhex("3698"))
-        assert self.emulator.program_counter == 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
 
     def test_opcode_if_not_equal(self):
-        assert self.emulator.program_counter == 0, "Program counter starting at an unexpected value."
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
 
         self.emulator.registers[6] = int("98", 16)
         self.emulator.opcode_if_not_equal(bytes.fromhex("3698"))
-        assert self.emulator.program_counter == 0, "Program counter was changed despite register value matching."
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register value matching."
 
         self.emulator.registers[6] = int("ff", 16)
         self.emulator.opcode_if_not_equal(bytes.fromhex("3698"))
-        assert self.emulator.program_counter == 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
 
     def test_opcode_if_register_equal(self):
-        assert self.emulator.program_counter == 0, "Program counter starting at an unexpected value."
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
 
         self.emulator.registers[10] = int("11", 16)
         self.emulator.registers[4] = int("12", 16)
         self.emulator.opcode_if_register_equal(bytes.fromhex("5a40"))
-        assert self.emulator.program_counter == 0, "Program counter was changed despite register value matching."
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register value matching."
 
         self.emulator.registers[10] = int("40", 16)
         self.emulator.registers[4] = int("40", 16)
         self.emulator.opcode_if_register_equal(bytes.fromhex("5a40"))
-        assert self.emulator.program_counter == 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
 
     def test_opcode_set_register_value(self):
         for register in self.emulator.registers:

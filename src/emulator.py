@@ -1,18 +1,52 @@
 import logging
 import sys
 
+from pathlib import Path
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s]:  %(message)s", stream=sys.stdout)
 logger.disabled = "pydevd" not in sys.modules
 
 UPPER_CHAR_MASK = 240
 LOWER_CHAR_MASK = 15
+GAME_START_ADDRESS = 512
 
 
 class Emulator:
     def __init__(self):
+        self.ram = bytearray(4096)
         self.registers = bytearray(16)
-        self.program_counter = 0
+        self.program_counter = GAME_START_ADDRESS
+
+    def load_game(self, path: Path) -> None:
+        """
+        Load the game found at the given path into memory.
+        :param path: The path to the game.
+        """
+        if not path:
+            logger.error("No path provided for a game to load!")
+            return
+
+        if not path.exists():
+            logger.error(f"Game could not be loaded as the path does not exist!  Path: {path}.")
+            return
+
+        if path.suffix != ".chip8":
+            logger.error("Game does not appear to be a CHIP-8 game as the '.chip8' file type was not found in the file name.  Path: {path}.")
+            return
+
+        logger.debug(f"Loading game at path {path}.")
+        with path.open("rb") as file:
+            game = file.read()
+            for index, value in enumerate(game):
+                self.ram[512 + index] = value
+
+    def print_ram(self) -> None:
+        """
+        Dump the full memory of the emulator.
+        """
+        for byte in self.ram:
+            print(hex(byte))
 
     # region Helpers
     @staticmethod
