@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from typing import List
+from typing import List, Tuple
 
 from pathlib import Path
 
@@ -11,6 +11,7 @@ logger.disabled = "pydevd" not in sys.modules
 
 UPPER_CHAR_MASK = 240
 LOWER_CHAR_MASK = 15
+BYTE_MASK = 255
 GAME_START_ADDRESS = 512
 RETURN_FROM_SUBROUTINE_OPCODE = bytes.fromhex("00EE")
 
@@ -70,6 +71,19 @@ class Emulator:
         :return: The lower character.
         """
         return byte & LOWER_CHAR_MASK
+
+    @staticmethod
+    def bounded_subtract(minuend: int, subtrahend: int) -> Tuple[int, int]:
+        """
+        Subtract the subtrahend from the minuend, bounded by the confines of a byte.
+        :param minuend: The integer from which to subtract.
+        :param subtrahend: The integer to subtract.
+        :return: The result of the subtraction and the not borrow (1 if there was no borrow, 0 otherwise).
+        """
+        difference_of_registers = minuend - subtrahend
+        result = difference_of_registers % 256
+        not_borrow = 1 if difference_of_registers >= 0 else 0
+        return result, not_borrow
     # endregion
 
     # region Opcodes
@@ -106,6 +120,18 @@ class Emulator:
             self.opcode_set_register_bitwise_and(opcode)
         elif first_char == 8 and last_char == 3:
             self.opcode_set_register_bitwise_xor(opcode)
+        elif first_char == 8 and last_char == 4:
+            self.opcode_add_other_register(opcode)
+        elif first_char == 8 and last_char == 5:
+            self.opcode_subtract_from_first_register(opcode)
+        elif first_char == 8 and last_char == 6:
+            self.opcode_bit_shift_right(opcode)
+        elif first_char == 8 and last_char == 7:
+            self.opcode_subtract_from_second_register(opcode)
+        elif first_char == 8 and last_char == 14:
+            self.opcode_bit_shift_left(opcode)
+        elif first_char == 9 and last_char == 0:
+            self.opcode_if_register_not_equal(opcode)
         else:
             logger.error(f"Unimplemented / Invalid Opcode: {opcode.hex()}.")
 
@@ -195,7 +221,7 @@ class Emulator:
 
     def opcode_add_value(self, opcode: bytes) -> None:
         """
-        Adds the provided value to the value of the provided register.  The carry flag is not set.
+        Adds the provided value to the value of the provided register.  The carry flag (register 15) is not set.
         :param opcode: The opcode to execute.
         """
         register = self.get_lower_char(opcode[0])
@@ -251,4 +277,90 @@ class Emulator:
         result = first_register_value ^ second_register_value
         self.registers[first_register] = result
         logger.debug(f"Execute Opcode {opcode.hex}: Set the value of register {first_register} to the bitwise xor of itself and the value of register {second_register} ({first_register_value} ^ {second_register_value} = {result}).")
+
+    def opcode_add_other_register(self, opcode: bytes) -> None:
+        """
+        Sets the value of the first provided register to the sum of itself and the value of the second provided register.  The carry flag (register 15) is set.
+        :param opcode: The opcode to execute.
+        """
+        first_register = self.get_lower_char(opcode[0])
+        second_register = self.get_upper_char(opcode[1])
+        first_register_value = self.registers[first_register]
+        second_register_value = self.registers[second_register]
+        sum_of_registers = first_register_value + second_register_value
+        result = sum_of_registers % 256
+        carry = 1 if sum_of_registers >= 256 else 0
+        self.registers[first_register] = result
+        self.registers[15] = carry
+        logger.debug(f"Execute Opcode {opcode.hex}: Set the value of register {first_register} to the sum of itself and the value of register {second_register} ({first_register_value} + {second_register_value} = {result}, carry = {carry}).")
+
+    def opcode_subtract_from_first_register(self, opcode: bytes) -> None:
+        """
+        Sets the value of the first provided register to the difference of itself and the value of the second provided register.  The not borrow flag (register 15) is set.
+        :param opcode: The opcode to execute.
+        """
+        first_register = self.get_lower_char(opcode[0])
+        second_register = self.get_upper_char(opcode[1])
+        first_register_value = self.registers[first_register]
+        second_register_value = self.registers[second_register]
+        result, not_borrow = self.bounded_subtract(first_register_value, second_register_value)
+        self.registers[first_register] = result
+        self.registers[15] = not_borrow
+        logger.debug(f"Execute Opcode {opcode.hex}: Set the value of register {first_register} to the difference of itself and the value of register {second_register} ({first_register_value} - {second_register_value} = {result}, not borrow = {not_borrow}).")
+
+    def opcode_bit_shift_right(self, opcode: bytes) -> None:
+        """
+        Shift the value of the first provided register to the right by 1.  Set register 15 to the value of the least significant bit before the operation.
+        :param opcode: The opcode to execute.
+        """
+        first_register = self.get_lower_char(opcode[0])
+        first_register_value = self.registers[first_register]
+        bit_shift = first_register_value >> 1
+        least_significant_bit = first_register_value & 1
+        self.registers[first_register] = bit_shift
+        self.registers[15] = least_significant_bit
+        logger.debug(f"Execute Opcode {opcode.hex}: Shift the value of register {first_register} to the right by 1 ({first_register_value} >> 1 = {bit_shift}, previous least significant bit = {least_significant_bit}).")
+
+    def opcode_subtract_from_second_register(self, opcode: bytes) -> None:
+        """
+        Sets the value of the first provided register to the difference of the value of the second provided register and itself.  The not borrow flag (register 15) is set.
+        :param opcode: The opcode to execute.
+        """
+        first_register = self.get_lower_char(opcode[0])
+        second_register = self.get_upper_char(opcode[1])
+        first_register_value = self.registers[first_register]
+        second_register_value = self.registers[second_register]
+        result, not_borrow = self.bounded_subtract(second_register_value, first_register_value)
+        self.registers[first_register] = result
+        self.registers[15] = not_borrow
+        logger.debug(f"Execute Opcode {opcode.hex}: Set the value of register {first_register} to the difference of the value of register {second_register} and itself ({second_register_value} - {first_register_value} = {result}, not borrow = {not_borrow}).")
+
+    def opcode_bit_shift_left(self, opcode: bytes) -> None:
+        """
+        Shift the value of the first provided register to the left by 1.  Set register 15 to the value of the most significant bit before the operation.
+        :param opcode: The opcode to execute.
+        """
+        first_register = self.get_lower_char(opcode[0])
+        first_register_value = self.registers[first_register]
+        bit_shift = (first_register_value << 1) & BYTE_MASK
+        most_significant_bit = 1 if first_register_value & 128 == 128 else 0
+        self.registers[first_register] = bit_shift
+        self.registers[15] = most_significant_bit
+        logger.debug(f"Execute Opcode {opcode.hex}: Shift the value of register {first_register} to the left by 1 ({first_register_value} << 1 = {bit_shift}, previous most significant bit = {most_significant_bit}).")
+
+    def opcode_if_register_not_equal(self, opcode: bytes) -> None:
+        """
+        Skip the next instruction if the value of the first provided register is not equal to the value of the second provided register.
+        :param opcode: The opcode to execute.
+        """
+        first_register = self.get_lower_char(opcode[0])
+        second_register = self.get_upper_char(opcode[1])
+        first_register_value = self.registers[first_register]
+        second_register_value = self.registers[second_register]
+        logger.debug(f"Execute Opcode {opcode.hex}: Skip next instruction if register {first_register}'s value ({first_register_value}) is not equal to register {second_register}'s value ({second_register_value}).")
+        if first_register_value != second_register_value:
+            self.program_counter += 2
+            logger.debug("Instruction skipped.")
+        else:
+            logger.debug("Instruction not skipped.")
     # endregion

@@ -71,7 +71,7 @@ class TestIndividualOpcodes:
         self.emulator.registers[10] = int("11", 16)
         self.emulator.registers[4] = int("12", 16)
         self.emulator.opcode_if_register_equal(bytes.fromhex("5a40"))
-        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register value matching."
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register values matching."
 
         self.emulator.registers[10] = int("40", 16)
         self.emulator.registers[4] = int("40", 16)
@@ -162,6 +162,160 @@ class TestIndividualOpcodes:
             else:
                 assert register == 0, "Different register than target had its value modified."
 
+    def test_opcode_add_other_register(self):
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        self.emulator.registers[4] = 200
+        self.emulator.registers[8] = 33
+        self.emulator.opcode_add_other_register(bytes.fromhex("8484"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 233, "Register not set to correct value."
+            elif index == 8:
+                assert register == 33, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 0, "Carry flag was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+        self.emulator.opcode_add_other_register(bytes.fromhex("8484"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 10, "Register not set to correct value."
+            elif index == 8:
+                assert register == 33, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 1, "Carry flag was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+    def test_opcode_subtract_from_first_register(self):
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        self.emulator.registers[4] = 100
+        self.emulator.registers[8] = 70
+        self.emulator.opcode_subtract_from_first_register(bytes.fromhex("8485"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 30, "Register not set to correct value."
+            elif index == 8:
+                assert register == 70, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 1, "Not borrow flag was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+        self.emulator.opcode_subtract_from_first_register(bytes.fromhex("8485"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 216, "Register not set to correct value."
+            elif index == 8:
+                assert register == 70, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 0, "Not borrow flag was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+    def test_opcode_bit_shift_right(self):
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        self.emulator.registers[4] = 85
+        self.emulator.registers[8] = 70
+        self.emulator.opcode_bit_shift_right(bytes.fromhex("8486"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 42, "Register not set to correct value."
+            elif index == 8:
+                assert register == 70, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 1, "Least significant bit was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+        self.emulator.opcode_bit_shift_right(bytes.fromhex("8486"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 21, "Register not set to correct value."
+            elif index == 8:
+                assert register == 70, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 0, "Least significant bit was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+    def test_opcode_subtract_from_second_register(self):
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        self.emulator.registers[4] = 70
+        self.emulator.registers[8] = 100
+        self.emulator.opcode_subtract_from_second_register(bytes.fromhex("8487"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 30, "Register not set to correct value."
+            elif index == 8:
+                assert register == 100, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 1, "Not borrow flag was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+        self.emulator.registers[8] = 10
+        self.emulator.opcode_subtract_from_second_register(bytes.fromhex("8487"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 236, "Register not set to correct value."
+            elif index == 8:
+                assert register == 10, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 0, "Not borrow flag was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+    def test_opcode_bit_shift_left(self):
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        self.emulator.registers[4] = 171
+        self.emulator.registers[8] = 70
+        self.emulator.opcode_bit_shift_left(bytes.fromhex("848e"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 86, "Register not set to correct value."
+            elif index == 8:
+                assert register == 70, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 1, "Most significant bit was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+        self.emulator.opcode_bit_shift_left(bytes.fromhex("848e"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 4:
+                assert register == 172, "Register not set to correct value."
+            elif index == 8:
+                assert register == 70, "Second register value was modified when it should not have been."
+            elif index == 15:
+                assert register == 0, "Most significant bit was set incorrectly."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+    def test_opcode_if_register_not_equal(self):
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
+
+        self.emulator.registers[10] = int("40", 16)
+        self.emulator.registers[4] = int("40", 16)
+        self.emulator.opcode_if_register_not_equal(bytes.fromhex("9a40"))
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register values not matching."
+
+        self.emulator.registers[10] = int("11", 16)
+        self.emulator.registers[4] = int("12", 16)
+        self.emulator.opcode_if_register_not_equal(bytes.fromhex("9a40"))
+        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
+
 
 class TestOpcodeRouting:
     @classmethod
@@ -202,7 +356,7 @@ class TestOpcodeRouting:
     @mock.patch.object(Emulator, "opcode_if_register_equal")
     def test_if_register_equal(self, mock_method):
         opcode = bytes.fromhex("5320")
-        bad_opcode = bytes.fromhex("5321")
+        bad_opcode = bytes.fromhex("9320")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_register_value")
@@ -245,4 +399,40 @@ class TestOpcodeRouting:
     def test_set_register_bitwise_xor(self, mock_method):
         opcode = bytes.fromhex("8483")
         bad_opcode = bytes.fromhex("8482")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_add_other_register")
+    def test_add_other_register(self, mock_method):
+        opcode = bytes.fromhex("8484")
+        bad_opcode = bytes.fromhex("8483")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_subtract_from_first_register")
+    def test_subtract_from_first_register(self, mock_method):
+        opcode = bytes.fromhex("8485")
+        bad_opcode = bytes.fromhex("8484")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_bit_shift_right")
+    def test_bit_shift_right(self, mock_method):
+        opcode = bytes.fromhex("8486")
+        bad_opcode = bytes.fromhex("848e")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_subtract_from_second_register")
+    def test_subtract_from_second_register(self, mock_method):
+        opcode = bytes.fromhex("8487")
+        bad_opcode = bytes.fromhex("8485")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_bit_shift_left")
+    def test_bit_shift_left(self, mock_method):
+        opcode = bytes.fromhex("848e")
+        bad_opcode = bytes.fromhex("8486")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_if_register_not_equal")
+    def test_if_register_not_equal(self, mock_method):
+        opcode = bytes.fromhex("9320")
+        bad_opcode = bytes.fromhex("5320")
         self.run_opcode(opcode, bad_opcode, mock_method)
