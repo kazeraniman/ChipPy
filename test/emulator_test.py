@@ -333,6 +333,33 @@ class TestIndividualOpcodes:
         # Not sure how to test random output, just a placeholder for now
         pass
 
+    def test_opcode_get_delay_timer(self):
+        assert self.emulator.delay == 0, "Delay timer starting at an unexpected value."
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        self.emulator.delay = 55
+        self.emulator.opcode_get_delay_timer(bytes.fromhex("f307"))
+        for index, register in enumerate(self.emulator.registers):
+            if index == 3:
+                assert register == 55, "Register not set to correct value."
+            else:
+                assert register == 0, "Different register than target had its value modified."
+
+    def test_opcode_set_delay_timer(self):
+        assert self.emulator.delay == 0, "Delay timer starting at an unexpected value."
+
+        self.emulator.registers[3] = 44
+        self.emulator.opcode_set_delay_timer(bytes.fromhex("f315"))
+        assert self.emulator.delay == 44, "Delay timer was not set correctly."
+
+    def test_opcode_set_sound_timer(self):
+        assert self.emulator.sound == 0, "Sound timer starting at an unexpected value."
+
+        self.emulator.registers[3] = 44
+        self.emulator.opcode_set_sound_timer(bytes.fromhex("f318"))
+        assert self.emulator.sound == 44, "Sound timer was not set correctly."
+
 
 class TestOpcodeRouting:
     @classmethod
@@ -470,4 +497,22 @@ class TestOpcodeRouting:
     def test_random_bitwise_and(self, mock_method):
         opcode = bytes.fromhex("c499")
         bad_opcode = bytes.fromhex("b5b2")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_get_delay_timer")
+    def test_get_delay_timer(self, mock_method):
+        opcode = bytes.fromhex("f307")
+        bad_opcode = bytes.fromhex("c499")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_set_delay_timer")
+    def test_set_delay_timer(self, mock_method):
+        opcode = bytes.fromhex("f315")
+        bad_opcode = bytes.fromhex("c499")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_set_sound_timer")
+    def test_set_sound_timer(self, mock_method):
+        opcode = bytes.fromhex("f318")
+        bad_opcode = bytes.fromhex("f315")
         self.run_opcode(opcode, bad_opcode, mock_method)
