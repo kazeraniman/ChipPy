@@ -1,14 +1,20 @@
 import logging
 import sys
+import random
 
 from typing import List, Tuple
 
 from pathlib import Path
 
+# Set up the logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s]:  %(message)s", stream=sys.stdout)
 logger.disabled = "pydevd" not in sys.modules
 
+# Initialize the random number generator
+random.seed()
+
+# Constants
 UPPER_CHAR_MASK = 240
 LOWER_CHAR_MASK = 15
 BYTE_MASK = 255
@@ -17,9 +23,13 @@ RETURN_FROM_SUBROUTINE_OPCODE = bytes.fromhex("00EE")
 
 
 class Emulator:
+    """
+    The class which hold all the functionality of the emulator.
+    """
     def __init__(self):
         self.ram = bytearray(4096)
         self.registers = bytearray(16)
+        self.register_i = 0
         self.program_counter = GAME_START_ADDRESS
         self.stack: List[int] = []
 
@@ -132,6 +142,12 @@ class Emulator:
             self.opcode_bit_shift_left(opcode)
         elif first_char == 9 and last_char == 0:
             self.opcode_if_register_not_equal(opcode)
+        elif first_char == 10:
+            self.opcode_set_register_i(opcode)
+        elif first_char == 11:
+            self.opcode_goto_addition(opcode)
+        elif first_char == 12:
+            self.opcode_random_bitwise_and(opcode)
         else:
             logger.error(f"Unimplemented / Invalid Opcode: {opcode.hex()}.")
 
@@ -363,4 +379,34 @@ class Emulator:
             logger.debug("Instruction skipped.")
         else:
             logger.debug("Instruction not skipped.")
+
+    def opcode_set_register_i(self, opcode: bytes) -> None:
+        """
+        Sets the value of register I to the provided value.
+        :param opcode: The opcode to execute.
+        """
+        address = (self.get_lower_char(opcode[0]) << 8) + opcode[1]
+        self.register_i = address
+        logger.debug(f"Execute Opcode {opcode.hex}: Set register I to {hex(address)}.")
+
+    def opcode_goto_addition(self, opcode: bytes) -> None:
+        """
+        Jump to the provided address plus the value of register 0.
+        :param opcode: The opcode to execute.
+        """
+        address = (self.get_lower_char(opcode[0]) << 8) + opcode[1]
+        register_value = self.registers[0]
+        self.program_counter = address + register_value
+        logger.debug(f"Execute Opcode {opcode.hex}: Jump to the provided address plus the value of register 0 ({hex(address)} + {hex(register_value)} = {hex(self.program_counter)}).")
+
+    def opcode_random_bitwise_and(self, opcode: bytes) -> None:
+        """
+        Set the value of the provided register to the bitwise and of the provided value and a random number [0, 255].
+        :param opcode: The opcode to execute.
+        """
+        register = self.get_lower_char(opcode[0])
+        random_value = random.randint(0, 255)
+        result = opcode[1] & random_value
+        self.registers[register] = result
+        logger.debug(f"Execute Opcode {opcode.hex}: Set the value of register {register} to the bitwise and of the provided value and a random number [0, 255] ({opcode[1]} & {random_value} = {result}).")
     # endregion

@@ -316,6 +316,23 @@ class TestIndividualOpcodes:
         self.emulator.opcode_if_register_not_equal(bytes.fromhex("9a40"))
         assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
 
+    def test_opcode_set_register_i(self):
+        assert self.emulator.register_i == 0, "Register I starting at an unexpected value."
+
+        self.emulator.opcode_set_register_i(bytes.fromhex("a491"))
+        assert self.emulator.register_i == int("491", 16), "Register I set to the wrong value."
+
+    def test_opcode_goto_addition(self):
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
+
+        self.emulator.registers[0] = 20
+        self.emulator.opcode_goto_addition(bytes.fromhex("b5b2"))
+        assert self.emulator.program_counter == int("5b2", 16) + 20, "Program counter incorrect after jump opcode."
+
+    def test_opcode_random_bitwise_and(self):
+        # Not sure how to test random output, just a placeholder for now
+        pass
+
 
 class TestOpcodeRouting:
     @classmethod
@@ -435,4 +452,22 @@ class TestOpcodeRouting:
     def test_if_register_not_equal(self, mock_method):
         opcode = bytes.fromhex("9320")
         bad_opcode = bytes.fromhex("5320")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_set_register_i")
+    def test_set_register_i(self, mock_method):
+        opcode = bytes.fromhex("a841")
+        bad_opcode = bytes.fromhex("9320")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_goto_addition")
+    def test_goto_addition(self, mock_method):
+        opcode = bytes.fromhex("b5b2")
+        bad_opcode = bytes.fromhex("a841")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_random_bitwise_and")
+    def test_random_bitwise_and(self, mock_method):
+        opcode = bytes.fromhex("c499")
+        bad_opcode = bytes.fromhex("b5b2")
         self.run_opcode(opcode, bad_opcode, mock_method)
