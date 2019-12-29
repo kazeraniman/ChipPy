@@ -329,9 +329,28 @@ class TestIndividualOpcodes:
         self.emulator.opcode_goto_addition(bytes.fromhex("b5b2"))
         assert self.emulator.program_counter == int("5b2", 16) + 20, "Program counter incorrect after jump opcode."
 
-    def test_opcode_random_bitwise_and(self):
-        # Not sure how to test random output, just a placeholder for now
-        pass
+    def test_opcode_if_key_pressed(self):
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
+        assert not self.emulator.keys[6], "Key press starting at an unexpected value."
+
+        self.emulator.opcode_if_key_pressed(bytes.fromhex("e69e"))
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite key not pressed."
+
+        self.emulator.keys[6] = True
+        self.emulator.opcode_if_key_pressed(bytes.fromhex("e69e"))
+        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
+
+    def test_opcode_if_key_not_pressed(self):
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
+        assert not self.emulator.keys[6], "Key press starting at an unexpected value."
+
+        self.emulator.keys[6] = True
+        self.emulator.opcode_if_key_not_pressed(bytes.fromhex("e6a1"))
+        assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite key pressed."
+
+        self.emulator.keys[6] = False
+        self.emulator.opcode_if_key_not_pressed(bytes.fromhex("e6a1"))
+        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
 
     def test_opcode_get_delay_timer(self):
         assert self.emulator.delay == 0, "Delay timer starting at an unexpected value."
@@ -359,6 +378,109 @@ class TestIndividualOpcodes:
         self.emulator.registers[3] = 44
         self.emulator.opcode_set_sound_timer(bytes.fromhex("f318"))
         assert self.emulator.sound == 44, "Sound timer was not set correctly."
+
+    def test_opcode_register_i_addition(self):
+        self.emulator.register_i = 4050
+        self.emulator.registers[7] = 50
+        self.emulator.opcode_register_i_addition(bytes.fromhex("f71e"))
+        assert self.emulator.register_i == 4, "Register I set to the wrong value."
+        assert self.emulator.registers[7] == 50, "Value of register was changed when it was not the target of the addition."
+        assert self.emulator.registers[15] == 1, "Overflow flag was not set correctly."
+
+        self.emulator.opcode_register_i_addition(bytes.fromhex("f71e"))
+        assert self.emulator.register_i == 54, "Register I set to the wrong value."
+        assert self.emulator.registers[7] == 50, "Value of register was changed when it was not the target of the addition."
+        assert self.emulator.registers[15] == 0, "Overflow flag was not set correctly."
+
+    def test_opcode_binary_coded_decimal(self):
+        for byte in self.emulator.ram:
+            assert byte == 0, "Ram starting at an unexpected value."
+
+        self.emulator.register_i = 3123
+        self.emulator.registers[12] = 135
+        self.emulator.opcode_binary_coded_decimal(bytes.fromhex("fc33"))
+        assert self.emulator.register_i == 3123, "Register I was modified when it should be left untouched."
+        for index, byte in enumerate(self.emulator.ram):
+            if index == 3123:
+                assert byte == 1, "Hundreds digit set to the incorrect value."
+            elif index == 3124:
+                assert byte == 3, "Tens digit set to the incorrect value."
+            elif index == 3125:
+                assert byte == 5, "Units digit set to the incorrect value."
+            else:
+                assert byte == 0, "Non-targeted ram address was changed when it shouldn't have been."
+
+        self.emulator.registers[12] = 68
+        self.emulator.opcode_binary_coded_decimal(bytes.fromhex("fc33"))
+        assert self.emulator.register_i == 3123, "Register I was modified when it should be left untouched."
+        for index, byte in enumerate(self.emulator.ram):
+            if index == 3123:
+                assert byte == 0, "Hundreds digit set to the incorrect value."
+            elif index == 3124:
+                assert byte == 6, "Tens digit set to the incorrect value."
+            elif index == 3125:
+                assert byte == 8, "Units digit set to the incorrect value."
+            else:
+                assert byte == 0, "Non-targeted ram address was changed when it shouldn't have been."
+
+        self.emulator.registers[12] = 5
+        self.emulator.opcode_binary_coded_decimal(bytes.fromhex("fc33"))
+        assert self.emulator.register_i == 3123, "Register I was modified when it should be left untouched."
+        for index, byte in enumerate(self.emulator.ram):
+            if index == 3123:
+                assert byte == 0, "Hundreds digit set to the incorrect value."
+            elif index == 3124:
+                assert byte == 0, "Tens digit set to the incorrect value."
+            elif index == 3125:
+                assert byte == 5, "Units digit set to the incorrect value."
+            else:
+                assert byte == 0, "Non-targeted ram address was changed when it shouldn't have been."
+
+    def test_opcode_register_dump(self):
+        for byte in self.emulator.ram:
+            assert byte == 0, "Ram starting at an unexpected value."
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        last_register = 12
+        self.emulator.register_i = 2000
+        for register in range(last_register + 1):
+            self.emulator.registers[register] = (register + 1) * 10
+        self.emulator.opcode_register_dump(bytes.fromhex("fc55"))
+        assert self.emulator.register_i == 2000, "Register I was modified when it should be left untouched."
+        for index, register in enumerate(self.emulator.registers):
+            if index < last_register + 1:
+                assert register == (index + 1) * 10, "Register value was modified by dump."
+            else:
+                assert register == 0, "Non-targeted register was modified."
+        for index, byte in enumerate(self.emulator.ram):
+            if self.emulator.register_i <= index <= self.emulator.register_i + last_register:
+                assert byte == (index - self.emulator.register_i + 1) * 10, "Register was not dumped correctly."
+            else:
+                assert byte == 0, "Non-targeted memory address was modified."
+
+    def test_opcode_register_load(self):
+        for byte in self.emulator.ram:
+            assert byte == 0, "Ram starting at an unexpected value."
+        for register in self.emulator.registers:
+            assert register == 0, "Register starting at an unexpected value."
+
+        last_register = 12
+        self.emulator.register_i = 2000
+        for byte in range(last_register + 1):
+            self.emulator.ram[self.emulator.register_i + byte] = (byte + 1) * 10
+        self.emulator.opcode_register_load(bytes.fromhex("fc65"))
+        assert self.emulator.register_i == 2000, "Register I was modified when it should be left untouched."
+        for index, register in enumerate(self.emulator.registers):
+            if index < last_register + 1:
+                assert register == (index + 1) * 10, "Register value was not loaded correctly"
+            else:
+                assert register == 0, "Non-targeted register was modified."
+        for index, byte in enumerate(self.emulator.ram):
+            if self.emulator.register_i <= index <= self.emulator.register_i + last_register:
+                assert byte == (index - self.emulator.register_i + 1) * 10, "Ram was modified by the load."
+            else:
+                assert byte == 0, "Non-targeted memory address was modified."
 
 
 class TestOpcodeRouting:
@@ -499,6 +621,18 @@ class TestOpcodeRouting:
         bad_opcode = bytes.fromhex("b5b2")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
+    @mock.patch.object(Emulator, "opcode_if_key_pressed")
+    def test_if_key_pressed(self, mock_method):
+        opcode = bytes.fromhex("e49e")
+        bad_opcode = bytes.fromhex("e4a1")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_if_key_not_pressed")
+    def test_if_key_not_pressed(self, mock_method):
+        opcode = bytes.fromhex("e4a1")
+        bad_opcode = bytes.fromhex("e49e")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
     @mock.patch.object(Emulator, "opcode_get_delay_timer")
     def test_get_delay_timer(self, mock_method):
         opcode = bytes.fromhex("f307")
@@ -515,4 +649,28 @@ class TestOpcodeRouting:
     def test_set_sound_timer(self, mock_method):
         opcode = bytes.fromhex("f318")
         bad_opcode = bytes.fromhex("f315")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_register_i_addition")
+    def test_register_i_addition(self, mock_method):
+        opcode = bytes.fromhex("f71e")
+        bad_opcode = bytes.fromhex("f318")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_binary_coded_decimal")
+    def test_binary_coded_decimal(self, mock_method):
+        opcode = bytes.fromhex("fc33")
+        bad_opcode = bytes.fromhex("f71e")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_register_dump")
+    def test_register_dump(self, mock_method):
+        opcode = bytes.fromhex("fc55")
+        bad_opcode = bytes.fromhex("fc65")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_register_load")
+    def test_register_load(self, mock_method):
+        opcode = bytes.fromhex("fc65")
+        bad_opcode = bytes.fromhex("fc55")
         self.run_opcode(opcode, bad_opcode, mock_method)

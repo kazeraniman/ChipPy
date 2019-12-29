@@ -27,6 +27,25 @@ SOUND_FREQUENCY = 44100
 SOUND_BUFFER = 4096
 TONE_HZ = 550
 
+KEY_LOOKUP = {
+    pygame.K_1: 0,
+    pygame.K_q: 1,
+    pygame.K_a: 2,
+    pygame.K_z: 3,
+    pygame.K_2: 4,
+    pygame.K_w: 5,
+    pygame.K_s: 6,
+    pygame.K_x: 7,
+    pygame.K_3: 8,
+    pygame.K_e: 9,
+    pygame.K_d: 10,
+    pygame.K_c: 11,
+    pygame.K_4: 12,
+    pygame.K_r: 13,
+    pygame.K_f: 14,
+    pygame.K_v: 15,
+}
+
 # Initialize the random number generator
 random.seed()
 
@@ -50,6 +69,7 @@ class Emulator:
         self.sound = 0
         self.program_counter = GAME_START_ADDRESS
         self.stack: List[int] = []
+        self.keys: List[bool] = [False] * 16
         self.screen = None
         self.pixels: List[List[bool]] = []
         for i in range(SCREEN_HEIGHT):
@@ -114,6 +134,12 @@ class Emulator:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     sys.exit(0)
+                elif event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
+                    key = KEY_LOOKUP.get(event.key, None)
+                    if key:
+                        pressed = event.type == pygame.KEYDOWN
+                        self.keys[key] = pressed
+                        print(f"Key State Changed.  Key: {key}, Pressed: {pressed}.")
 
     # region Timers
     def decrement_delay_timer(self) -> None:
@@ -285,12 +311,24 @@ class Emulator:
             self.opcode_goto_addition(opcode)
         elif first_char == 12:
             self.opcode_random_bitwise_and(opcode)
+        elif first_char == 14 and opcode[1] == 158:
+            self.opcode_if_key_pressed(opcode)
+        elif first_char == 14 and opcode[1] == 161:
+            self.opcode_if_key_not_pressed(opcode)
         elif first_char == 15 and opcode[1] == 7:
             self.opcode_get_delay_timer(opcode)
         elif first_char == 15 and opcode[1] == 21:
             self.opcode_set_delay_timer(opcode)
         elif first_char == 15 and opcode[1] == 24:
             self.opcode_set_sound_timer(opcode)
+        elif first_char == 15 and opcode[1] == 30:
+            self.opcode_register_i_addition(opcode)
+        elif first_char == 15 and opcode[1] == 51:
+            self.opcode_binary_coded_decimal(opcode)
+        elif first_char == 15 and opcode[1] == 85:
+            self.opcode_register_dump(opcode)
+        elif first_char == 15 and opcode[1] == 101:
+            self.opcode_register_load(opcode)
         else:
             logger.error(f"Unimplemented / Invalid Opcode: {opcode.hex()}.")
 
@@ -553,6 +591,34 @@ class Emulator:
         self.registers[register] = result
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {register} to the bitwise and of the provided value and a random number [0, 255] ({opcode[1]} & {random_value} = {result}).")
 
+    def opcode_if_key_pressed(self, opcode: bytes) -> None:
+        """
+        Skip the next instruction if the provided key is pressed.
+        :param opcode: The opcode to execute.
+        """
+        key = self.get_lower_char(opcode[0])
+        pressed = self.keys[key]
+        logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if key {key} is pressed ({pressed}).")
+        if pressed:
+            self.program_counter += 2
+            logger.debug("Instruction skipped.")
+        else:
+            logger.debug("Instruction not skipped.")
+
+    def opcode_if_key_not_pressed(self, opcode: bytes) -> None:
+        """
+        Skip the next instruction if the provided key is not pressed.
+        :param opcode: The opcode to execute.
+        """
+        key = self.get_lower_char(opcode[0])
+        pressed = self.keys[key]
+        logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if key {key} is not pressed ({pressed}).")
+        if not pressed:
+            self.program_counter += 2
+            logger.debug("Instruction skipped.")
+        else:
+            logger.debug("Instruction not skipped.")
+
     def opcode_get_delay_timer(self, opcode: bytes) -> None:
         """
         Sets the value of the provided register to the value of the delay timer.
@@ -588,6 +654,64 @@ class Emulator:
             self.sound_player.play(-1)
             self.toggle_sound_timer(True)
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of the delay timer to value of register {register} ({register_value}).")
+
+    def opcode_register_i_addition(self, opcode: bytes) -> None:
+        """
+        Add the value of the provided register to register I.  The overflow flag (register 15) is set.
+        :param opcode: The opcode to execute.
+        """
+        register = self.get_lower_char(opcode[0])
+        register_value = self.registers[register]
+        register_i_value = self.register_i
+        sum_of_registers = register_i_value + register_value
+        result = sum_of_registers % 4096
+        overflow = 1 if sum_of_registers >= 4096 else 0
+        self.register_i = result
+        self.registers[15] = overflow
+        logger.debug(f"Execute Opcode {opcode.hex()}: Adds the value of register {register} to the value of register I {register} ({register_i_value} + {register_value} = {result}, overflow = {overflow}).")
+
+    def opcode_binary_coded_decimal(self, opcode: bytes) -> None:
+        """
+        Store the Binary Coded Decimal representation of the value of the provided register in memory, starting at the value of register I.
+        Hundreds digit stored in memory at the location of the value of register I.
+        Tens digit stored in memory at the location of the value of register I + 1.
+        Units digit stored in memory at the location of the value of register I + 2.
+        :param opcode: The opcode to execute.
+        """
+        register = self.get_lower_char(opcode[0])
+        register_value = self.registers[register]
+        hundreds = register_value // 100 % 10
+        tens = register_value // 10 % 10
+        units = register_value % 10
+        self.ram[self.register_i] = hundreds
+        self.ram[self.register_i + 1] = tens
+        self.ram[self.register_i + 2] = units
+        logger.debug(f"Execute Opcode {opcode.hex()}: Store the Binary Coded Decimal representation of the value of register {register} ({register_value}), starting at the value of register I ({hex(self.register_i)}), ({hundreds} at {hex(self.register_i)}, {tens} at {hex(self.register_i + 1)}, {units} at {hex(self.register_i + 2)}).")
+
+    def opcode_register_dump(self, opcode: bytes) -> None:
+        """
+        Store the values of all registers from register 0 to the provided register in memory, starting at the value of register I.
+        :param opcode: The opcode to execute.
+        """
+        last_register = self.get_lower_char(opcode[0])
+        logger.debug(f"Execute Opcode {opcode.hex()}: Dumping the values of all registers from register 0 to register {last_register} into memory, starting at the value of register I ({hex(self.register_i)}).")
+        for register in range(last_register + 1):
+            target_address = self.register_i + register
+            register_value = self.registers[register]
+            self.ram[target_address] = register_value
+            logger.debug(f"Register {register}'s value ({register_value}) stored at address {target_address}.")
+
+    def opcode_register_load(self, opcode: bytes) -> None:
+        """
+        Load the values of all registers from register 0 to the provided register from memory, starting at the value of register I.
+        :param opcode: The opcode to execute.
+        """
+        last_register = self.get_lower_char(opcode[0])
+        logger.debug(f"Execute Opcode {opcode.hex()}: Loading the values of all registers from register 0 to register {last_register} from memory, starting at the value of register I ({hex(self.register_i)}).")
+        for register in range(last_register + 1):
+            target_address = self.register_i + register
+            self.registers[register] = self.ram[target_address]
+            logger.debug(f"Register {register}'s value ({self.registers[register]}) loaded from address {target_address}.")
     # endregion
 
 
