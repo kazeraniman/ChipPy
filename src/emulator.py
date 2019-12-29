@@ -173,7 +173,7 @@ class Emulator:
                     sys.exit(0)
                 elif event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
                     key = KEY_LOOKUP.get(event.key, None)
-                    if key:
+                    if key is not None:
                         pressed = event.type == pygame.KEYDOWN
                         self.keys[key] = pressed
                         logger.debug(f"Key State Changed.  Key: {key}, Pressed: {pressed}.")
