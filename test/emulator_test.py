@@ -1,6 +1,6 @@
 from unittest import mock
 
-from src.emulator import Emulator, GAME_START_ADDRESS
+from src.emulator import Emulator, GAME_START_ADDRESS, INTERPRETER_END_ADDRESS
 
 
 class TestHelperMethods:
@@ -8,12 +8,11 @@ class TestHelperMethods:
         self.emulator = Emulator()
 
     def test_load_digit_sprites(self):
-        for byte in self.emulator.ram:
-            assert byte == 0, "Ram starting at an unexpected value."
+        self.emulator.ram = bytearray(4096)
 
         self.emulator.load_digit_sprites()
         for index, byte in enumerate(self.emulator.ram):
-            if index >= 96:
+            if index >= INTERPRETER_END_ADDRESS:
                 assert byte == 0, "Ram outside of the sprite storage was modified."
         assert self.emulator.ram[0] == int("f0", 16), "The first character of the 0 sprite is incorrect."
         assert self.emulator.ram[1] == int("90", 16), "The second character of the 0 sprite is incorrect."
@@ -435,8 +434,9 @@ class TestIndividualOpcodes:
         assert self.emulator.ram[self.emulator.register_i + 4] == int("e0", 16), "The fifth character of the B sprite is incorrect."
 
     def test_opcode_binary_coded_decimal(self):
-        for byte in self.emulator.ram:
-            assert byte == 0, "Ram starting at an unexpected value."
+        for index, byte in enumerate(self.emulator.ram):
+            if index >= INTERPRETER_END_ADDRESS:
+                assert byte == 0, "Ram starting at an unexpected value."
 
         self.emulator.register_i = 3123
         self.emulator.registers[12] = 135
@@ -449,7 +449,7 @@ class TestIndividualOpcodes:
                 assert byte == 3, "Tens digit set to the incorrect value."
             elif index == 3125:
                 assert byte == 5, "Units digit set to the incorrect value."
-            else:
+            elif index >= INTERPRETER_END_ADDRESS:
                 assert byte == 0, "Non-targeted ram address was changed when it shouldn't have been."
 
         self.emulator.registers[12] = 68
@@ -462,7 +462,7 @@ class TestIndividualOpcodes:
                 assert byte == 6, "Tens digit set to the incorrect value."
             elif index == 3125:
                 assert byte == 8, "Units digit set to the incorrect value."
-            else:
+            elif index >= INTERPRETER_END_ADDRESS:
                 assert byte == 0, "Non-targeted ram address was changed when it shouldn't have been."
 
         self.emulator.registers[12] = 5
@@ -475,12 +475,13 @@ class TestIndividualOpcodes:
                 assert byte == 0, "Tens digit set to the incorrect value."
             elif index == 3125:
                 assert byte == 5, "Units digit set to the incorrect value."
-            else:
+            elif index >= INTERPRETER_END_ADDRESS:
                 assert byte == 0, "Non-targeted ram address was changed when it shouldn't have been."
 
     def test_opcode_register_dump(self):
-        for byte in self.emulator.ram:
-            assert byte == 0, "Ram starting at an unexpected value."
+        for index, byte in enumerate(self.emulator.ram):
+            if index >= INTERPRETER_END_ADDRESS:
+                assert byte == 0, "Ram starting at an unexpected value."
         for register in self.emulator.registers:
             assert register == 0, "Register starting at an unexpected value."
 
@@ -498,12 +499,13 @@ class TestIndividualOpcodes:
         for index, byte in enumerate(self.emulator.ram):
             if self.emulator.register_i <= index <= self.emulator.register_i + last_register:
                 assert byte == (index - self.emulator.register_i + 1) * 10, "Register was not dumped correctly."
-            else:
+            elif index >= INTERPRETER_END_ADDRESS:
                 assert byte == 0, "Non-targeted memory address was modified."
 
     def test_opcode_register_load(self):
-        for byte in self.emulator.ram:
-            assert byte == 0, "Ram starting at an unexpected value."
+        for index, byte in enumerate(self.emulator.ram):
+            if index >= INTERPRETER_END_ADDRESS:
+                assert byte == 0, "Ram starting at an unexpected value."
         for register in self.emulator.registers:
             assert register == 0, "Register starting at an unexpected value."
 
@@ -521,7 +523,7 @@ class TestIndividualOpcodes:
         for index, byte in enumerate(self.emulator.ram):
             if self.emulator.register_i <= index <= self.emulator.register_i + last_register:
                 assert byte == (index - self.emulator.register_i + 1) * 10, "Ram was modified by the load."
-            else:
+            elif index >= INTERPRETER_END_ADDRESS:
                 assert byte == 0, "Non-targeted memory address was modified."
 
 

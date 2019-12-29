@@ -19,6 +19,7 @@ UPPER_CHAR_MASK = 240
 LOWER_CHAR_MASK = 15
 BYTE_MASK = 255
 GAME_START_ADDRESS = 512
+INTERPRETER_END_ADDRESS = 80
 RETURN_FROM_SUBROUTINE_OPCODE = bytes.fromhex("00EE")
 CLEAR_SCREEN_OPCODE = bytes.fromhex("00E0")
 SCREEN_WIDTH = 64
@@ -85,6 +86,8 @@ class Emulator:
         self.opcode_timer: Optional[threading.Timer] = None
         self.delay_timer: Optional[threading.Timer] = None
         self.sound_timer: Optional[threading.Timer] = None
+
+        self.load_digit_sprites()
 
         # Sound is weird; borrowing some of this chunk from here, I claim no credit for it: http://shallowsky.com/blog/programming/python-play-chords.html
         length = SOUND_FREQUENCY / TONE_HZ
