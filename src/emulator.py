@@ -20,25 +20,32 @@ LOWER_CHAR_MASK = 15
 BYTE_MASK = 255
 GAME_START_ADDRESS = 512
 RETURN_FROM_SUBROUTINE_OPCODE = bytes.fromhex("00EE")
+CLEAR_SCREEN_OPCODE = bytes.fromhex("00E0")
 SCREEN_WIDTH = 64
 SCREEN_HEIGHT = 32
-OPCODE_DELAY = 1/60
+SCALED_SCREEN_WIDTH = 800
+SCALED_SCREEN_HEIGHT = 400
+SPRITE_WIDTH = 8
+TIMER_DELAY = 1 / 60
+OPCODE_DELAY = 1 / 500
 SOUND_FREQUENCY = 44100
 SOUND_BUFFER = 4096
 TONE_HZ = 550
 
+COLOUR_PALETTE = [(0, 0, 0), (0, 255, 0)]
+
 KEY_LOOKUP = {
-    pygame.K_1: 0,
-    pygame.K_q: 1,
-    pygame.K_a: 2,
-    pygame.K_z: 3,
-    pygame.K_2: 4,
+    pygame.K_1: 1,
+    pygame.K_q: 4,
+    pygame.K_a: 7,
+    pygame.K_z: 10,
+    pygame.K_2: 2,
     pygame.K_w: 5,
-    pygame.K_s: 6,
-    pygame.K_x: 7,
-    pygame.K_3: 8,
-    pygame.K_e: 9,
-    pygame.K_d: 10,
+    pygame.K_s: 8,
+    pygame.K_x: 0,
+    pygame.K_3: 3,
+    pygame.K_e: 6,
+    pygame.K_d: 9,
     pygame.K_c: 11,
     pygame.K_4: 12,
     pygame.K_r: 13,
@@ -52,6 +59,7 @@ random.seed()
 # Initialize PyGame
 pygame.mixer.init(SOUND_FREQUENCY, -16, 1, 4096)
 pygame.init()
+pygame.display.init()
 
 
 class Emulator:
@@ -70,10 +78,9 @@ class Emulator:
         self.program_counter = GAME_START_ADDRESS
         self.stack: List[int] = []
         self.keys: List[bool] = [False] * 16
-        self.screen = None
-        self.pixels: List[List[bool]] = []
-        for i in range(SCREEN_HEIGHT):
-            self.pixels.append([False] * SCREEN_WIDTH)
+        self.screen: Optional[pygame.Surface] = None
+        self.inter_screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), 0, 8)
+        self.pixels = np.zeros((SCREEN_WIDTH, SCREEN_HEIGHT), np.ubyte)
 
         self.opcode_timer: Optional[threading.Timer] = None
         self.delay_timer: Optional[threading.Timer] = None
@@ -116,6 +123,35 @@ class Emulator:
             for index, value in enumerate(game):
                 self.ram[512 + index] = value
 
+    def load_digit_sprites(self) -> None:
+        """
+        Load the sprites for the hexadecimal digits 0-f into memory.
+        """
+        self.ram[0:5] = bytes.fromhex("f0909090f0")
+        self.ram[5:10] = bytes.fromhex("2060202070")
+        self.ram[10:15] = bytes.fromhex("f010f080f0")
+        self.ram[15:20] = bytes.fromhex("f010f010f0")
+        self.ram[20:25] = bytes.fromhex("9090f01010")
+        self.ram[25:30] = bytes.fromhex("f080f010f0")
+        self.ram[30:35] = bytes.fromhex("f080f090f0")
+        self.ram[35:40] = bytes.fromhex("f010204040")
+        self.ram[40:45] = bytes.fromhex("f090f090f0")
+        self.ram[45:50] = bytes.fromhex("f090f010f0")
+        self.ram[50:55] = bytes.fromhex("f090f09090")
+        self.ram[55:60] = bytes.fromhex("e090e090e0")
+        self.ram[60:65] = bytes.fromhex("f0808080f0")
+        self.ram[65:70] = bytes.fromhex("e0909090e0")
+        self.ram[70:75] = bytes.fromhex("f080f080f0")
+        self.ram[75:80] = bytes.fromhex("f080f08080")
+
+    def draw_to_display(self) -> None:
+        """
+        Update the display.
+        """
+        pygame.surfarray.blit_array(self.inter_screen, self.pixels)
+        pygame.transform.scale(self.inter_screen, (SCALED_SCREEN_WIDTH, SCALED_SCREEN_HEIGHT), self.screen)
+        pygame.display.flip()
+
     def print_ram(self) -> None:
         """
         Dump the full memory of the emulator.
@@ -128,7 +164,8 @@ class Emulator:
         Temporary game loop which loads a game, sets up a screen, and then starts the fetch-execute loop.
         """
         self.load_game(Path("../games/INVADERS.chip8"))
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode((SCALED_SCREEN_WIDTH, SCALED_SCREEN_HEIGHT), 0, 8)
+        self.screen.set_palette(COLOUR_PALETTE)
         self.fetch_and_run_opcode()
         while True:
             for event in pygame.event.get():
@@ -139,7 +176,7 @@ class Emulator:
                     if key:
                         pressed = event.type == pygame.KEYDOWN
                         self.keys[key] = pressed
-                        print(f"Key State Changed.  Key: {key}, Pressed: {pressed}.")
+                        logger.debug(f"Key State Changed.  Key: {key}, Pressed: {pressed}.")
 
     # region Timers
     def decrement_delay_timer(self) -> None:
@@ -200,7 +237,7 @@ class Emulator:
             self.delay_timer.cancel()
 
         if status:
-            self.delay_timer = threading.Timer(OPCODE_DELAY, self.decrement_delay_timer)
+            self.delay_timer = threading.Timer(TIMER_DELAY, self.decrement_delay_timer)
             self.delay_timer.daemon = True
             self.delay_timer.start()
 
@@ -213,7 +250,7 @@ class Emulator:
             self.sound_timer.cancel()
 
         if status:
-            self.sound_timer = threading.Timer(OPCODE_DELAY, self.decrement_sound_timer)
+            self.sound_timer = threading.Timer(TIMER_DELAY, self.decrement_sound_timer)
             self.sound_timer.daemon = True
             self.sound_timer.start()
     # endregion
@@ -269,7 +306,9 @@ class Emulator:
         first_char = self.get_upper_char(opcode[0])
         last_char = self.get_lower_char(opcode[1])
 
-        if opcode == RETURN_FROM_SUBROUTINE_OPCODE:
+        if opcode == CLEAR_SCREEN_OPCODE:
+            self.opcode_clear_screen(opcode)
+        elif opcode == RETURN_FROM_SUBROUTINE_OPCODE:
             self.opcode_return_from_subroutine(opcode)
         elif first_char == 1:
             self.opcode_goto(opcode)
@@ -311,6 +350,8 @@ class Emulator:
             self.opcode_goto_addition(opcode)
         elif first_char == 12:
             self.opcode_random_bitwise_and(opcode)
+        elif first_char == 13:
+            self.opcode_draw_sprite(opcode)
         elif first_char == 14 and opcode[1] == 158:
             self.opcode_if_key_pressed(opcode)
         elif first_char == 14 and opcode[1] == 161:
@@ -323,6 +364,8 @@ class Emulator:
             self.opcode_set_sound_timer(opcode)
         elif first_char == 15 and opcode[1] == 30:
             self.opcode_register_i_addition(opcode)
+        elif first_char == 15 and opcode[1] == 41:
+            self.opcode_set_register_i_to_hex_sprite_address(opcode)
         elif first_char == 15 and opcode[1] == 51:
             self.opcode_binary_coded_decimal(opcode)
         elif first_char == 15 and opcode[1] == 85:
@@ -331,6 +374,15 @@ class Emulator:
             self.opcode_register_load(opcode)
         else:
             logger.error(f"Unimplemented / Invalid Opcode: {opcode.hex()}.")
+
+    def opcode_clear_screen(self, opcode: bytes) -> None:
+        """
+        Clear the screen.
+        :param opcode: The opcode to execute.
+        """
+        self.pixels.fill(0)
+        self.draw_to_display()
+        logger.debug(f"Execute Opcode {opcode.hex()}: Clearing the screen.")
 
     def opcode_return_from_subroutine(self, opcode: bytes) -> None:
         """
@@ -591,6 +643,30 @@ class Emulator:
         self.registers[register] = result
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {register} to the bitwise and of the provided value and a random number [0, 255] ({opcode[1]} & {random_value} = {result}).")
 
+    def opcode_draw_sprite(self, opcode: bytes) -> None:
+        """
+        Draws the sprite with the provided height found at the address denoted by the value of register I to the provided x and y coordinates.  The collision flag (register 15) is set to 1 if a pixel was unset, 0 otherwise.
+        :param opcode: The opcode to execute.
+        """
+        register_x = self.get_lower_char(opcode[0])
+        register_y = self.get_upper_char(opcode[1])
+        register_x_value = self.registers[register_x]
+        register_y_value = self.registers[register_y]
+        height = self.get_lower_char(opcode[1])
+        pixel_unset = 0
+        for row in range(height):
+            byte = self.ram[self.register_i + row]
+            y_coordinate = (register_y_value + row) % SCREEN_HEIGHT
+            for column in range(SPRITE_WIDTH):
+                x_coordinate = (register_x_value + column) % SCREEN_WIDTH
+                pixel = ((byte >> (SPRITE_WIDTH - 1 - column)) & 1)
+                if pixel_unset == 0 and self.pixels[x_coordinate, y_coordinate] == 1 and pixel == 1:
+                    pixel_unset = 1
+                self.pixels[x_coordinate, y_coordinate] ^= pixel
+        self.registers[15] = pixel_unset
+        self.draw_to_display()
+        logger.debug(f"Execute Opcode {opcode.hex()}: Drawing the sprite with a height of {height} and found at address {self.register_i} to the screen at the x-cooordinate from the value of register {register_x} and y-coordinate from the value of register {register_y} ({register_x_value, register_y_value}).")
+
     def opcode_if_key_pressed(self, opcode: bytes) -> None:
         """
         Skip the next instruction if the provided key is pressed.
@@ -669,6 +745,16 @@ class Emulator:
         self.register_i = result
         self.registers[15] = overflow
         logger.debug(f"Execute Opcode {opcode.hex()}: Adds the value of register {register} to the value of register I {register} ({register_i_value} + {register_value} = {result}, overflow = {overflow}).")
+
+    def opcode_set_register_i_to_hex_sprite_address(self, opcode: bytes) -> None:
+        """
+        Sets the value of register I to the address of the hexadecimal sprite represented by the value in the provided register.
+        :param opcode: The opcode to execute.
+        """
+        register = self.get_lower_char(opcode[0])
+        register_value = self.registers[register]
+        self.register_i = register_value * 5
+        logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register I to the address ({self.register_i}) of the hexadecimal sprite represented by the value of register {register} ({register_value}).")
 
     def opcode_binary_coded_decimal(self, opcode: bytes) -> None:
         """

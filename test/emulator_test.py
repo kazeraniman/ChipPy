@@ -3,6 +3,35 @@ from unittest import mock
 from src.emulator import Emulator, GAME_START_ADDRESS
 
 
+class TestHelperMethods:
+    def setup_method(self):
+        self.emulator = Emulator()
+
+    def test_load_digit_sprites(self):
+        for byte in self.emulator.ram:
+            assert byte == 0, "Ram starting at an unexpected value."
+
+        self.emulator.load_digit_sprites()
+        for index, byte in enumerate(self.emulator.ram):
+            if index >= 96:
+                assert byte == 0, "Ram outside of the sprite storage was modified."
+        assert self.emulator.ram[0] == int("f0", 16), "The first character of the 0 sprite is incorrect."
+        assert self.emulator.ram[1] == int("90", 16), "The second character of the 0 sprite is incorrect."
+        assert self.emulator.ram[2] == int("90", 16), "The third character of the 0 sprite is incorrect."
+        assert self.emulator.ram[3] == int("90", 16), "The fourth character of the 0 sprite is incorrect."
+        assert self.emulator.ram[4] == int("f0", 16), "The fifth character of the 0 sprite is incorrect."
+        assert self.emulator.ram[35] == int("f0", 16), "The first character of the 7 sprite is incorrect."
+        assert self.emulator.ram[36] == int("10", 16), "The second character of the 7 sprite is incorrect."
+        assert self.emulator.ram[37] == int("20", 16), "The third character of the 7 sprite is incorrect."
+        assert self.emulator.ram[38] == int("40", 16), "The fourth character of the 7 sprite is incorrect."
+        assert self.emulator.ram[39] == int("40", 16), "The fifth character of the 7 sprite is incorrect."
+        assert self.emulator.ram[75] == int("f0", 16), "The first character of the F sprite is incorrect."
+        assert self.emulator.ram[76] == int("80", 16), "The second character of the F sprite is incorrect."
+        assert self.emulator.ram[77] == int("f0", 16), "The third character of the F sprite is incorrect."
+        assert self.emulator.ram[78] == int("80", 16), "The fourth character of the F sprite is incorrect."
+        assert self.emulator.ram[79] == int("80", 16), "The fifth character of the F sprite is incorrect."
+
+
 class TestIndividualOpcodes:
     def setup_method(self):
         self.emulator = Emulator()
@@ -392,6 +421,19 @@ class TestIndividualOpcodes:
         assert self.emulator.registers[7] == 50, "Value of register was changed when it was not the target of the addition."
         assert self.emulator.registers[15] == 0, "Overflow flag was not set correctly."
 
+    def test_opcode_set_register_i_to_hex_sprite_address(self):
+        assert self.emulator.register_i == 0
+
+        self.emulator.load_digit_sprites()
+        self.emulator.registers[4] = 11
+        self.emulator.opcode_set_register_i_to_hex_sprite_address(bytes.fromhex("f429"))
+        assert self.emulator.register_i == 55, "Register I was not set to the correct address for the given sprite."
+        assert self.emulator.ram[self.emulator.register_i] == int("e0", 16), "The first character of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i + 1] == int("90", 16), "The second character of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i + 2] == int("e0", 16), "The third character of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i + 3] == int("90", 16), "The fourth character of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i + 4] == int("e0", 16), "The fifth character of the B sprite is incorrect."
+
     def test_opcode_binary_coded_decimal(self):
         for byte in self.emulator.ram:
             assert byte == 0, "Ram starting at an unexpected value."
@@ -494,6 +536,18 @@ class TestOpcodeRouting:
 
         self.emulator.run_opcode(opcode)
         mock_method.assert_called_with(opcode)
+
+    @mock.patch.object(Emulator, "opcode_clear_screen")
+    def test_clear_screen(self, mock_method):
+        opcode = bytes.fromhex("00e0")
+        bad_opcode = bytes.fromhex("00ee")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_return_from_subroutine")
+    def test_return_from_subroutine(self, mock_method):
+        opcode = bytes.fromhex("00ee")
+        bad_opcode = bytes.fromhex("00e0")
+        self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_goto")
     def test_goto(self, mock_method):
@@ -621,6 +675,12 @@ class TestOpcodeRouting:
         bad_opcode = bytes.fromhex("b5b2")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
+    @mock.patch.object(Emulator, "opcode_draw_sprite")
+    def test_draw_sprite(self, mock_method):
+        opcode = bytes.fromhex("d458")
+        bad_opcode = bytes.fromhex("c499")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
     @mock.patch.object(Emulator, "opcode_if_key_pressed")
     def test_if_key_pressed(self, mock_method):
         opcode = bytes.fromhex("e49e")
@@ -655,6 +715,12 @@ class TestOpcodeRouting:
     def test_register_i_addition(self, mock_method):
         opcode = bytes.fromhex("f71e")
         bad_opcode = bytes.fromhex("f318")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_set_register_i_to_hex_sprite_address")
+    def test_set_register_i_to_hex_sprite_address(self, mock_method):
+        opcode = bytes.fromhex("f029")
+        bad_opcode = bytes.fromhex("f71e")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_binary_coded_decimal")
