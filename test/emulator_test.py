@@ -539,6 +539,12 @@ class TestOpcodeRouting:
         self.emulator.run_opcode(opcode)
         mock_method.assert_called_with(opcode)
 
+    @mock.patch.object(Emulator, "opcode_call_subroutine")
+    def test_call_machine_code_routine(self, mock_method):
+        opcode = bytes.fromhex("0d52")
+        bad_opcode = bytes.fromhex("00ee")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
     @mock.patch.object(Emulator, "opcode_clear_screen")
     def test_clear_screen(self, mock_method):
         opcode = bytes.fromhex("00e0")
@@ -699,6 +705,12 @@ class TestOpcodeRouting:
     def test_get_delay_timer(self, mock_method):
         opcode = bytes.fromhex("f307")
         bad_opcode = bytes.fromhex("c499")
+        self.run_opcode(opcode, bad_opcode, mock_method)
+
+    @mock.patch.object(Emulator, "opcode_wait_for_key_press")
+    def test_wait_for_key_press(self, mock_method):
+        opcode = bytes.fromhex("f90a")
+        bad_opcode = bytes.fromhex("f307")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_delay_timer")

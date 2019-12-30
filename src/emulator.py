@@ -20,8 +20,8 @@ LOWER_CHAR_MASK = 15
 BYTE_MASK = 255
 GAME_START_ADDRESS = 512
 INTERPRETER_END_ADDRESS = 80
-RETURN_FROM_SUBROUTINE_OPCODE = bytes.fromhex("00EE")
-CLEAR_SCREEN_OPCODE = bytes.fromhex("00E0")
+RETURN_FROM_SUBROUTINE_OPCODE = bytes.fromhex("00ee")
+CLEAR_SCREEN_OPCODE = bytes.fromhex("00e0")
 SCREEN_WIDTH = 64
 SCREEN_HEIGHT = 32
 SCALED_SCREEN_WIDTH = 800
@@ -63,6 +63,15 @@ pygame.init()
 pygame.display.init()
 
 
+class WaitForKey:
+    """
+    A class which handles the blocking-for-key-press state.
+    """
+    def __init__(self):
+        self.is_waiting = False
+        self.storing_register = 0
+
+
 class Emulator:
     """
     The class which hold all the functionality of the emulator.
@@ -82,6 +91,7 @@ class Emulator:
         self.screen: Optional[pygame.Surface] = None
         self.inter_screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), 0, 8)
         self.pixels = np.zeros((SCREEN_WIDTH, SCREEN_HEIGHT), np.ubyte)
+        self.waiting_for_key = WaitForKey()
 
         self.opcode_timer: Optional[threading.Timer] = None
         self.delay_timer: Optional[threading.Timer] = None
@@ -101,7 +111,7 @@ class Emulator:
         """
         Destructor.
         """
-        self.kill_all_timers()
+        self.toggle_all_timers(False)
 
     def load_game(self, path: Path) -> None:
         """
@@ -181,6 +191,21 @@ class Emulator:
                         self.keys[key] = pressed
                         logger.debug(f"Key State Changed.  Key: {key}, Pressed: {pressed}.")
 
+                        if self.waiting_for_key.is_waiting and pressed:
+                            self.store_key_press_in_waiting_register(key)
+
+    def store_key_press_in_waiting_register(self, key: int) -> None:
+        """
+        Stores the provided key in the waiting register.
+        """
+        if not self.waiting_for_key.is_waiting:
+            return
+
+        self.waiting_for_key.is_waiting = False
+        self.registers[self.waiting_for_key.storing_register] = key
+        self.toggle_all_timers(True)
+        logger.debug(f"Storing the key {key} in the register {self.waiting_for_key.storing_register}, completing the blocking opcode and un-blocking all execution.")
+
     # region Timers
     def decrement_delay_timer(self) -> None:
         """
@@ -210,18 +235,19 @@ class Emulator:
             self.toggle_sound_timer(True)
             logger.debug(f"Starting sound timer.")
 
-    def kill_all_timers(self) -> None:
+    def toggle_all_timers(self, status: bool) -> None:
         """
         Stop all timers.
+        :param status: True if the timers should be started, False otherwise.
         """
-        self.toggle_opcode_timer(False)
-        self.toggle_delay_timer(False)
-        self.toggle_sound_timer(False)
+        self.toggle_opcode_timer(status)
+        self.toggle_delay_timer(status)
+        self.toggle_sound_timer(status)
 
     def toggle_opcode_timer(self, status: bool) -> None:
         """
         Start / stop the opcode timer.
-        :param status: True if the timer should be started, false otherwise.
+        :param status: True if the timer should be started, False otherwise.
         """
         if self.opcode_timer:
             self.opcode_timer.cancel()
@@ -298,7 +324,9 @@ class Emulator:
         """
         opcode = self.ram[self.program_counter:self.program_counter + 2]
         self.run_opcode(opcode)
-        self.toggle_opcode_timer(True)
+
+        if not self.waiting_for_key.is_waiting:
+            self.toggle_opcode_timer(True)
 
     def run_opcode(self, opcode: bytes) -> None:
         """
@@ -313,6 +341,8 @@ class Emulator:
             self.opcode_clear_screen(opcode)
         elif opcode == RETURN_FROM_SUBROUTINE_OPCODE:
             self.opcode_return_from_subroutine(opcode)
+        elif first_char == 0:
+            self.opcode_call_subroutine(opcode)
         elif first_char == 1:
             self.opcode_goto(opcode)
         elif first_char == 2:
@@ -361,6 +391,8 @@ class Emulator:
             self.opcode_if_key_not_pressed(opcode)
         elif first_char == 15 and opcode[1] == 7:
             self.opcode_get_delay_timer(opcode)
+        elif first_char == 15 and opcode[1] == 10:
+            self.opcode_wait_for_key_press(opcode)
         elif first_char == 15 and opcode[1] == 21:
             self.opcode_set_delay_timer(opcode)
         elif first_char == 15 and opcode[1] == 24:
@@ -706,6 +738,16 @@ class Emulator:
         register = self.get_lower_char(opcode[0])
         self.registers[register] = self.delay
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {register} to the value of the delay timer ({self.registers[register]}).")
+
+    def opcode_wait_for_key_press(self, opcode: bytes) -> None:
+        """
+        Block all execution until a keypress is detected, at which point it is stored in the provided register and execution may resume.
+        :param opcode: The opcode to execute.
+        """
+        register = self.get_lower_char(opcode[0])
+        self.waiting_for_key.is_waiting = True
+        self.waiting_for_key.storing_register = register
+        logger.debug(f"Execute Opcode {opcode.hex()}: Blocking operation until a keypress is detected and stored in register {register}.")
 
     def opcode_set_delay_timer(self, opcode: bytes) -> None:
         """
