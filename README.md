@@ -18,6 +18,9 @@ I did try a few games and they seem to work and draw correctly, so for the most 
 ### Space Invaders
 ![Space Invaders](screenshots/space_invaders.png "Space Invaders")
 
+### Maze
+![Maze](screenshots/maze.png "Maze")
+
 ### Tic-Tac-Toe
 ![Tic-Tac-Toe](screenshots/tic_tac_toe.png "Tic-Tac-Toe")
 
@@ -42,7 +45,7 @@ I did try a few games and they seem to work and draw correctly, so for the most 
 - I haven't tried every single game, so apologies if some of them don't work.
 
 ## Controls
-Aside from the actual game controls, you may close the window to stop the emulator and you may press L at any time to open the game picker window to load a new game.
+Aside from the actual game controls, you may close the window or press ESC to stop the emulator, and you may press L at any time to open the game picker window to load a new game.
 
 When it comes to the game controls, I have put the mapping I used down below, but each game has it's own controls and I'm sad to say your guess is as good as mine there.
 

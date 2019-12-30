@@ -237,15 +237,23 @@ class Emulator:
         """
         self.load_game()
 
-        while True:
+        running = True
+        while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    sys.exit(0)
-                elif event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
+                    running = False
+                    continue
+
+                if event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
                     pressed = event.type == pygame.KEYDOWN
+
+                    if pressed and event.key == pygame.K_ESCAPE:
+                        running = False
+                        continue
 
                     if pressed and event.key == pygame.K_l and not self.selecting_game:
                         self.load_game()
+                        continue
 
                     # CHIP-8 Controls
                     key = KEY_LOOKUP.get(event.key, None)
@@ -912,3 +920,7 @@ class Emulator:
 if __name__ == "__main__":
     emulator = Emulator()
     emulator.event_loop()
+    emulator.__del__()
+    pygame.display.quit()
+    pygame.quit()
+    sys.exit()
