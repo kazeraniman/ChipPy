@@ -361,23 +361,25 @@ class TestIndividualOpcodes:
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
         assert not self.emulator.keys[6], "Key press starting at an unexpected value."
 
-        self.emulator.opcode_if_key_pressed(bytes.fromhex("e69e"))
+        self.emulator.registers[4] = 6
+        self.emulator.opcode_if_key_pressed(bytes.fromhex("e49e"))
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite key not pressed."
 
         self.emulator.keys[6] = True
-        self.emulator.opcode_if_key_pressed(bytes.fromhex("e69e"))
+        self.emulator.opcode_if_key_pressed(bytes.fromhex("e49e"))
         assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
 
     def test_opcode_if_key_not_pressed(self):
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
         assert not self.emulator.keys[6], "Key press starting at an unexpected value."
 
+        self.emulator.registers[4] = 6
         self.emulator.keys[6] = True
-        self.emulator.opcode_if_key_not_pressed(bytes.fromhex("e6a1"))
+        self.emulator.opcode_if_key_not_pressed(bytes.fromhex("e4a1"))
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite key pressed."
 
         self.emulator.keys[6] = False
-        self.emulator.opcode_if_key_not_pressed(bytes.fromhex("e6a1"))
+        self.emulator.opcode_if_key_not_pressed(bytes.fromhex("e4a1"))
         assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
 
     def test_opcode_get_delay_timer(self):

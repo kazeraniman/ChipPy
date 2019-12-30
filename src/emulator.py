@@ -764,12 +764,13 @@ class Emulator:
 
     def opcode_if_key_pressed(self, opcode: bytes) -> None:
         """
-        Skip the next instruction if the provided key is pressed.
+        Skip the next instruction if the key represented by the value of the provided register is pressed.
         :param opcode: The opcode to execute.
         """
-        key = self.get_lower_char(opcode[0])
+        register = self.get_lower_char(opcode[0])
+        key = self.registers[register]
         pressed = self.keys[key]
-        logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if key {key} is pressed ({pressed}).")
+        logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if the key represented by the value of register {register} ({key}) is pressed ({pressed}).")
         if pressed:
             self.program_counter += 2
             logger.debug("Instruction skipped.")
@@ -778,12 +779,13 @@ class Emulator:
 
     def opcode_if_key_not_pressed(self, opcode: bytes) -> None:
         """
-        Skip the next instruction if the provided key is not pressed.
+        Skip the next instruction if the key represented by the value of the provided register is not pressed.
         :param opcode: The opcode to execute.
         """
-        key = self.get_lower_char(opcode[0])
+        register = self.get_lower_char(opcode[0])
+        key = self.registers[register]
         pressed = self.keys[key]
-        logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if key {key} is not pressed ({pressed}).")
+        logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if the key represented by the value of register {register} ({key}) is not pressed ({pressed}).")
         if not pressed:
             self.program_counter += 2
             logger.debug("Instruction skipped.")
