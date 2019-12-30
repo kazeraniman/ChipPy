@@ -3,6 +3,8 @@ import sys
 import random
 import pygame
 import threading
+import easygui
+
 import numpy as np
 
 from typing import List, Tuple, Optional
@@ -92,6 +94,8 @@ class Emulator:
         self.inter_screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), 0, 8)
         self.pixels = np.zeros((SCREEN_WIDTH, SCREEN_HEIGHT), np.ubyte)
         self.waiting_for_key = WaitForKey()
+        self.game_loaded = False
+        self.selecting_game = False
 
         self.opcode_timer: Optional[threading.Timer] = None
         self.delay_timer: Optional[threading.Timer] = None
@@ -107,27 +111,69 @@ class Emulator:
         sound_wave = np.resize(one_cycle, (SOUND_FREQUENCY,)).astype(np.int16)
         self.sound_player = pygame.sndarray.make_sound(sound_wave)
 
+        pygame.display.set_caption("ChipPy")
+        self.screen = pygame.display.set_mode((SCALED_SCREEN_WIDTH, SCALED_SCREEN_HEIGHT), 0, 8)
+        self.screen.set_palette(COLOUR_PALETTE)
+
     def __del__(self):
         """
         Destructor.
         """
         self.toggle_all_timers(False)
 
-    def load_game(self, path: Path) -> None:
+    def reset(self):
         """
-        Load the game found at the given path into memory.
-        :param path: The path to the game.
+        Reset the state of the emulator.
         """
+        self.game_loaded = False
+        self.selecting_game = False
+        self.toggle_all_timers(False)
+        self.sound_player.stop()
+        self.waiting_for_key.is_waiting = False
+        self.register_i = 0
+        self.delay = 0
+        self.sound = 0
+        self.stack: List[int] = []
+        self.keys: List[bool] = [False] * 16
+        self.program_counter = GAME_START_ADDRESS
+        self.pixels.fill(0)
+
+        self.ram = bytearray(4096)
+        self.registers = bytearray(16)
+
+        self.load_digit_sprites()
+
+        self.clear_screen()
+
+        pygame.display.set_caption("ChipPy")
+
+    def load_game(self) -> None:
+        """
+        Stop any currently running game, load the selected game into memory, and start it up.
+        """
+        if self.game_loaded:
+            self.reset()
+
+        self.selecting_game = True
+        file_name = easygui.fileopenbox(title="Select a Game", filetypes=["*.chip8"])
+        self.selecting_game = False
+
+        if not file_name:
+            easygui.msgbox("Pick a game to play!  Press the L key to re-open the game picker.", "No Game Selected")
+            return
+
+        path = Path(file_name)
+
         if not path:
-            logger.error("No path provided for a game to load!")
+            easygui.msgbox("No path provided for a game to load!", "No Game Provided")
             return
 
         if not path.exists():
-            logger.error(f"Game could not be loaded as the path does not exist!  Path: {path}.")
+            easygui.msgbox(f"Game could not be loaded as the path does not exist!  Path: {path}.", "Game Not Found")
             return
 
         if path.suffix != ".chip8":
-            logger.error("Game does not appear to be a CHIP-8 game as the '.chip8' file type was not found in the file name.  Path: {path}.")
+            easygui.msgbox(f"Game does not appear to be a CHIP-8 game as the '.chip8' file type was not found in the file name.  Path: {path}.", "Wrong File Extension")
             return
 
         logger.debug(f"Loading game at path {path}.")
@@ -135,6 +181,11 @@ class Emulator:
             game = file.read()
             for index, value in enumerate(game):
                 self.ram[512 + index] = value
+
+        pygame.display.set_caption(path.stem)
+
+        self.game_loaded = True
+        self.fetch_and_run_opcode()
 
     def load_digit_sprites(self) -> None:
         """
@@ -165,6 +216,13 @@ class Emulator:
         pygame.transform.scale(self.inter_screen, (SCALED_SCREEN_WIDTH, SCALED_SCREEN_HEIGHT), self.screen)
         pygame.display.flip()
 
+    def clear_screen(self) -> None:
+        """
+        Clear the screen.
+        """
+        self.pixels.fill(0)
+        self.draw_to_display()
+
     def print_ram(self) -> None:
         """
         Dump the full memory of the emulator.
@@ -172,22 +230,25 @@ class Emulator:
         for byte in self.ram:
             print(hex(byte))
 
-    def game_loop(self) -> None:
+    def event_loop(self) -> None:
         """
-        Temporary game loop which loads a game, sets up a screen, and then starts the fetch-execute loop.
+        Loop which handles all events and spawns the first game picker to get started.
         """
-        self.load_game(Path("../games/INVADERS.chip8"))
-        self.screen = pygame.display.set_mode((SCALED_SCREEN_WIDTH, SCALED_SCREEN_HEIGHT), 0, 8)
-        self.screen.set_palette(COLOUR_PALETTE)
-        self.fetch_and_run_opcode()
+        self.load_game()
+
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     sys.exit(0)
                 elif event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
+                    pressed = event.type == pygame.KEYDOWN
+
+                    if pressed and event.key == pygame.K_l and not self.selecting_game:
+                        self.load_game()
+
+                    # CHIP-8 Controls
                     key = KEY_LOOKUP.get(event.key, None)
                     if key is not None:
-                        pressed = event.type == pygame.KEYDOWN
                         self.keys[key] = pressed
                         logger.debug(f"Key State Changed.  Key: {key}, Pressed: {pressed}.")
 
@@ -415,8 +476,7 @@ class Emulator:
         Clear the screen.
         :param opcode: The opcode to execute.
         """
-        self.pixels.fill(0)
-        self.draw_to_display()
+        self.clear_screen()
         logger.debug(f"Execute Opcode {opcode.hex()}: Clearing the screen.")
 
     def opcode_return_from_subroutine(self, opcode: bytes) -> None:
@@ -848,4 +908,4 @@ class Emulator:
 
 if __name__ == "__main__":
     emulator = Emulator()
-    emulator.game_loop()
+    emulator.event_loop()
