@@ -1,6 +1,23 @@
 # ChipPy
 A CHIP-8 emulator made in Python.
 
+## Table of Contents
+- [Description](#description)
+- [Running Instructions](#running-instructions)
+- [Screenshots](#screenshots)
+  - [Space Invaders](#space-invaders)
+  - [Maze](#maze)
+  - [Tic-Tac-Toe](#tic-tac-toe)
+  - [Pong](#pong)
+  - [Tetris](#tetris)
+  - [Base Emulator](#base-emulator)
+- [Assorted Mental Notes](#assorted-mental-notes)
+- [Controls](#controls)
+  - [Original CHIP-8](#original-chip-8)
+  - [Keyboard Mapping](#keyboard-mapping)
+- [Games](#games)
+- [Reference Material](#reference-material)
+
 ## Description
 I got curious as to how emulation works, so to dive in and try it out before seeing techniques on how to improve, I decided to make a CHIP-8 emulator in Python!  I've heard that this is a good place to start as the hardware and instructions are simple so it's a great place to make mistakes and learn.  I also wanted to try out some other libraries so this seemed like a good excuse to take them out for a spin before going into greater depth there as well.  As this is my first time doing anything of the sort, and as it was just intended as a quick little side project for the sake of learning, there will be some silly choices and mistakes, but I hope that whoever's reading this has fun like I did and gets motivated to try it themself :)
 
