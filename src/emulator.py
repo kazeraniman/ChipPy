@@ -34,6 +34,7 @@ OPCODE_DELAY = 1 / 500
 SOUND_FREQUENCY = 44100
 SOUND_BUFFER = 4096
 TONE_HZ = 550
+GAMES_PATH = str(Path(__file__).resolve().parent.parent.joinpath("games/.chip8"))
 
 COLOUR_PALETTE = [(0, 0, 0), (0, 255, 0)]
 
@@ -155,7 +156,7 @@ class Emulator:
             self.reset()
 
         self.selecting_game = True
-        file_name = easygui.fileopenbox(title="Select a Game", filetypes=["*.chip8"])
+        file_name = easygui.fileopenbox(title="Select a Game", default=GAMES_PATH, filetypes=[["*.chip8", "CHIP-8"]])
         self.selecting_game = False
 
         if not file_name:
