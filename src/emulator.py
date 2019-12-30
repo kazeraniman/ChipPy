@@ -11,33 +11,42 @@ from typing import List, Tuple, Optional
 
 from pathlib import Path
 
-# Set up the logging
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s]:  %(message)s", stream=sys.stdout)
-logger.disabled = "pydevd" not in sys.modules
-
-# Constants
+# region Constants
+# Masks
 UPPER_CHAR_MASK = 240
 LOWER_CHAR_MASK = 15
 BYTE_MASK = 255
-GAME_START_ADDRESS = 512
-INTERPRETER_END_ADDRESS = 80
+NUM_REPRESENTABLE_INTS_BYTE = 256
+
+# Opcodes
 RETURN_FROM_SUBROUTINE_OPCODE = bytes.fromhex("00ee")
 CLEAR_SCREEN_OPCODE = bytes.fromhex("00e0")
+
+# Memory Addresses
+GAME_START_ADDRESS = 512
+INTERPRETER_END_ADDRESS = 80
+
+# Graphics
 SCREEN_WIDTH = 64
 SCREEN_HEIGHT = 32
 SCALED_SCREEN_WIDTH = 800
 SCALED_SCREEN_HEIGHT = 400
 SPRITE_WIDTH = 8
+COLOUR_PALETTE = [(0, 0, 0), (0, 255, 0)]
+
+# Timers
 TIMER_DELAY = 1 / 60
 OPCODE_DELAY = 1 / 500
+
+# Sound
 SOUND_FREQUENCY = 44100
 SOUND_BUFFER = 4096
 TONE_HZ = 550
+
+# Games
 GAMES_PATH = str(Path(__file__).resolve().parent.parent.joinpath("games/.chip8"))
 
-COLOUR_PALETTE = [(0, 0, 0), (0, 255, 0)]
-
+# Controls
 KEY_LOOKUP = {
     pygame.K_1: 1,
     pygame.K_q: 4,
@@ -56,6 +65,12 @@ KEY_LOOKUP = {
     pygame.K_f: 14,
     pygame.K_v: 15,
 }
+# endregion
+
+# Set up the logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s]:  %(message)s", stream=sys.stdout)
+logger.disabled = "pydevd" not in sys.modules
 
 # Initialize the random number generator
 random.seed()
@@ -71,6 +86,9 @@ class WaitForKey:
     A class which handles the blocking-for-key-press state.
     """
     def __init__(self):
+        """
+        Constructor.
+        """
         self.is_waiting = False
         self.storing_register = 0
 
@@ -79,10 +97,12 @@ class Emulator:
     """
     The class which hold all the functionality of the emulator.
     """
+    # region Lifecycle
     def __init__(self):
         """
         Constructor.
         """
+        # Set up the main members
         self.ram = bytearray(4096)
         self.registers = bytearray(16)
         self.register_i = 0
@@ -98,10 +118,12 @@ class Emulator:
         self.game_loaded = False
         self.selecting_game = False
 
+        # Declare the timers
         self.opcode_timer: Optional[threading.Timer] = None
         self.delay_timer: Optional[threading.Timer] = None
         self.sound_timer: Optional[threading.Timer] = None
 
+        # Load the hexadecimal digit sprites into memory
         self.load_digit_sprites()
 
         # Sound is weird; borrowing some of this chunk from here, I claim no credit for it: http://shallowsky.com/blog/programming/python-play-chords.html
@@ -112,6 +134,7 @@ class Emulator:
         sound_wave = np.resize(one_cycle, (SOUND_FREQUENCY,)).astype(np.int16)
         self.sound_player = pygame.sndarray.make_sound(sound_wave)
 
+        # Set up the window
         pygame.display.set_caption("ChipPy")
         self.screen = pygame.display.set_mode((SCALED_SCREEN_WIDTH, SCALED_SCREEN_HEIGHT), 0, 8)
         self.screen.set_palette(COLOUR_PALETTE)
@@ -126,6 +149,7 @@ class Emulator:
         """
         Reset the state of the emulator.
         """
+        # Re-initialize the necessary members
         self.game_loaded = False
         self.selecting_game = False
         self.toggle_all_timers(False)
@@ -139,55 +163,76 @@ class Emulator:
         self.program_counter = GAME_START_ADDRESS
         self.pixels.fill(0)
 
+        # Re-initialize memory
         self.ram = bytearray(4096)
         self.registers = bytearray(16)
-
         self.load_digit_sprites()
 
+        # Re-initialize screen
         self.clear_screen()
-
         pygame.display.set_caption("ChipPy")
+    # endregion
 
+    # region Memory
     def load_game(self) -> None:
         """
         Stop any currently running game, load the selected game into memory, and start it up.
         """
+        # Reset the state if a game was already loaded
         if self.game_loaded:
             self.reset()
 
+        # Provide the dialog to select a game, setting a flag to prevent multiple dialogs
         self.selecting_game = True
         file_name = easygui.fileopenbox(title="Select a Game", default=GAMES_PATH, filetypes=[["*.chip8", "CHIP-8"]])
         self.selecting_game = False
 
+        # If there is no file name, provide an appropriate message
         if not file_name:
             easygui.msgbox("Pick a game to play!  Press the L key to re-open the game picker.", "No Game Selected")
             return
 
+        # Get the path to the file
         path = Path(file_name)
 
+        # If the path could not be created, provide an appropriate message
         if not path:
-            easygui.msgbox("No path provided for a game to load!", "No Game Provided")
+            easygui.msgbox("No path provided for a game to load!  Press the L key to re-open the game picker.", "No Game Provided")
             return
 
+        # If the path does not exist somehow, provide an appropriate message
         if not path.exists():
-            easygui.msgbox(f"Game could not be loaded as the path does not exist!  Path: {path}.", "Game Not Found")
+            easygui.msgbox(f"Game could not be loaded as the path does not exist!  Press the L key to re-open the game picker.  Path: {path}.", "Game Not Found")
             return
 
+        # If the selected file does not appear to be a CHIP-8 game, provide an appropriate message
         if path.suffix != ".chip8":
-            easygui.msgbox(f"Game does not appear to be a CHIP-8 game as the '.chip8' file type was not found in the file name.  Path: {path}.", "Wrong File Extension")
+            easygui.msgbox(f"Game does not appear to be a CHIP-8 game as the '.chip8' file type was not found in the file name.  Press the L key to re-open the game picker.  Path: {path}.", "Wrong File Extension")
             return
 
+        # Load the game into memory
         logger.debug(f"Loading game at path {path}.")
         with path.open("rb") as file:
             game = file.read()
             for index, value in enumerate(game):
-                self.ram[512 + index] = value
+                self.ram[GAME_START_ADDRESS + index] = value
 
+        # Set the window title to match the name of the game
         pygame.display.set_caption(path.stem)
 
+        # Mark the game as loaded and start the fetch-execute loop
         self.game_loaded = True
         self.fetch_and_run_opcode()
 
+    def print_ram(self) -> None:
+        """
+        Dump the full memory of the emulator.
+        """
+        for byte in self.ram:
+            print(hex(byte))
+    # endregion
+
+    # region Graphics
     def load_digit_sprites(self) -> None:
         """
         Load the sprites for the hexadecimal digits 0-f into memory.
@@ -213,8 +258,13 @@ class Emulator:
         """
         Update the display.
         """
+        # Draw the pixels to an intermediary surface
         pygame.surfarray.blit_array(self.inter_screen, self.pixels)
+
+        # Scale the surface to the final screen size
         pygame.transform.scale(self.inter_screen, (SCALED_SCREEN_WIDTH, SCALED_SCREEN_HEIGHT), self.screen)
+
+        # Update the screen
         pygame.display.flip()
 
     def clear_screen(self) -> None:
@@ -223,34 +273,32 @@ class Emulator:
         """
         self.pixels.fill(0)
         self.draw_to_display()
+    # endregion
 
-    def print_ram(self) -> None:
-        """
-        Dump the full memory of the emulator.
-        """
-        for byte in self.ram:
-            print(hex(byte))
-
+    # region Flow
     def event_loop(self) -> None:
         """
-        Loop which handles all events and spawns the first game picker to get started.
+        Loop which handles all events.
         """
-        self.load_game()
-
         running = True
         while running:
+            # Go through each event
             for event in pygame.event.get():
+                # Mark the emulator as closing if the close button was clicked
                 if event.type == pygame.QUIT:
                     running = False
                     continue
 
+                # Handle keypresses
                 if event.type == pygame.KEYDOWN or event.type == pygame.KEYUP:
                     pressed = event.type == pygame.KEYDOWN
 
+                    # The escape key marks the emulator as closing
                     if pressed and event.key == pygame.K_ESCAPE:
                         running = False
                         continue
 
+                    # The L key opens the game picker if there is no game picker already open
                     if pressed and event.key == pygame.K_l and not self.selecting_game:
                         self.load_game()
                         continue
@@ -261,32 +309,45 @@ class Emulator:
                         self.keys[key] = pressed
                         logger.debug(f"Key State Changed.  Key: {key}, Pressed: {pressed}.")
 
+                        # Handle the blocking-for-keypress opcode
                         if self.waiting_for_key.is_waiting and pressed:
                             self.store_key_press_in_waiting_register(key)
 
     def store_key_press_in_waiting_register(self, key: int) -> None:
         """
         Stores the provided key in the waiting register.
+        :param key: The key to store.
         """
+        # If we're not currently waiting on a keypress, this method was called erroneously, abort
         if not self.waiting_for_key.is_waiting:
             return
 
+        # Store the keypress in the requested register
         self.waiting_for_key.is_waiting = False
         self.registers[self.waiting_for_key.storing_register] = key
+
+        # Restart execution
         self.toggle_all_timers(True)
         logger.debug(f"Storing the key {key} in the register {self.waiting_for_key.storing_register}, completing the blocking opcode and un-blocking all execution.")
+    # endregion
 
     # region Timers
     def decrement_delay_timer(self) -> None:
         """
         Decrement the value of the delay timer, restarting it if the value is still above 0.
         """
+        # Stop the timer
         self.toggle_delay_timer(False)
+
+        # Decrement
         self.delay -= 1
         logger.debug(f"Delay timer decremented, new value is {self.delay}.")
+
+        # If the timer has reached or passed 0, we're done, just clamp it
         if self.delay <= 0:
             self.delay = 0
         else:
+            # Restart the timer since it hasn't hit 0 yet
             self.toggle_delay_timer(True)
             logger.debug(f"Starting delay timer.")
 
@@ -294,20 +355,26 @@ class Emulator:
         """
         Decrement the value of the sound timer, restarting it if the value is still above 0, stopping the sound otherwise.
         """
+        # Stop the timer
         self.toggle_sound_timer(False)
+
+        # Decrement
         self.sound -= 1
         logger.debug(f"Sound timer decremented, new value is {self.sound}.")
+
+        # If the timer has reached or passed 0, we're done, clamp it and stop playing any sound
         if self.sound <= 0:
             self.sound = 0
             self.sound_player.stop()
             logger.debug(f"Stopping sound.")
         else:
+            # Restart the timer since it hasn't hit 0 yet
             self.toggle_sound_timer(True)
             logger.debug(f"Starting sound timer.")
 
     def toggle_all_timers(self, status: bool) -> None:
         """
-        Stop all timers.
+        Start / stop all timers.
         :param status: True if the timers should be started, False otherwise.
         """
         self.toggle_opcode_timer(status)
@@ -319,12 +386,19 @@ class Emulator:
         Start / stop the opcode timer.
         :param status: True if the timer should be started, False otherwise.
         """
+        # Kill the current timer if it exists
         if self.opcode_timer:
             self.opcode_timer.cancel()
 
+        # Start the timer if requested
         if status:
+            # Create a new timer
             self.opcode_timer = threading.Timer(OPCODE_DELAY, self.fetch_and_run_opcode)
+
+            # Make sure it is killed if the parent process ends
             self.opcode_timer.daemon = True
+
+            # Actually start the timer
             self.opcode_timer.start()
 
     def toggle_delay_timer(self, status: bool) -> None:
@@ -332,12 +406,19 @@ class Emulator:
         Start / stop the delay timer.
         :param status: True if the timer should be started, false otherwise.
         """
+        # Kill the current timer if it exists
         if self.delay_timer:
             self.delay_timer.cancel()
 
+        # Start the timer if requested
         if status:
+            # Create a new timer
             self.delay_timer = threading.Timer(TIMER_DELAY, self.decrement_delay_timer)
+
+            # Make sure it is killed if the parent process ends
             self.delay_timer.daemon = True
+
+            # Actually start the timer
             self.delay_timer.start()
 
     def toggle_sound_timer(self, status: bool) -> None:
@@ -345,12 +426,19 @@ class Emulator:
         Start / stop the sound timer.
         :param status: True if the timer should be started, false otherwise.
         """
+        # Kill the current timer if it exists
         if self.sound_timer:
             self.sound_timer.cancel()
 
+        # Start the timer if requested
         if status:
+            # Create a new timer
             self.sound_timer = threading.Timer(TIMER_DELAY, self.decrement_sound_timer)
+
+            # Make sure it is killed if the parent process ends
             self.sound_timer.daemon = True
+
+            # Actually start the timer
             self.sound_timer.start()
     # endregion
 
@@ -382,7 +470,7 @@ class Emulator:
         :return: The result of the subtraction and the not borrow (1 if there was no borrow, 0 otherwise).
         """
         difference_of_registers = minuend - subtrahend
-        result = difference_of_registers % 256
+        result = difference_of_registers % NUM_REPRESENTABLE_INTS_BYTE
         not_borrow = 1 if difference_of_registers >= 0 else 0
         return result, not_borrow
     # endregion
@@ -918,9 +1006,16 @@ class Emulator:
 
 
 if __name__ == "__main__":
+    # Create an instance
     emulator = Emulator()
+
+    # Open the initial game selection dialog
+    emulator.load_game()
+
+    # Start the event loop
     emulator.event_loop()
+
+    # We have left the main loop, so clean up and exit gracefully
     emulator.__del__()
     pygame.display.quit()
     pygame.quit()
-    sys.exit()

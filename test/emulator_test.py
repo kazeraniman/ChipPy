@@ -30,6 +30,21 @@ class TestHelperMethods:
         assert self.emulator.ram[78] == int("80", 16), "The fourth character of the F sprite is incorrect."
         assert self.emulator.ram[79] == int("80", 16), "The fifth character of the F sprite is incorrect."
 
+    def test_get_upper_char(self):
+        assert self.emulator.get_upper_char(int("5b", 16)) == 5, "Could not get correct upper character in normal byte."
+        assert self.emulator.get_upper_char(int("50", 16)) == 5, "Could not get correct upper character in byte with 0 lower character."
+        assert self.emulator.get_upper_char(int("b", 16)) == 0, "Could not get correct upper character in byte no upper character."
+
+    def test_get_lower_char(self):
+        assert self.emulator.get_lower_char(int("5b", 16)) == 11, "Could not get correct lower character in normal byte."
+        assert self.emulator.get_lower_char(int("50", 16)) == 0, "Could not get correct lower character in byte with 0 lower character."
+        assert self.emulator.get_lower_char(int("b", 16)) == 11, "Could not get correct lower character in byte no upper character."
+
+    def test_bounded_subtract(self):
+        assert self.emulator.bounded_subtract(200, 100) == (100, 1), "Incorrect subtraction with positive result."
+        assert self.emulator.bounded_subtract(33, 33) == (0, 1), "Incorrect subtraction with 0 result."
+        assert self.emulator.bounded_subtract(100, 200) == (156, 0), "Incorrect subtraction with negative result."
+
 
 class TestIndividualOpcodes:
     def setup_method(self):
