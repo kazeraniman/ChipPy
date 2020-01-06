@@ -58,8 +58,9 @@ I did try a few games and they seem to work and draw correctly, so for the most 
 - Going off the back of the last point, I do want to learn a better way to manage input as well.
 - I saw varying values for clock speed so I'm not really sure what to put yet for the instruction execution.  I've set it to a fairly arbitrary value for now.
 - Writing these tests was pretty useful, but I need to have a better idea in mind of what I want to test and how to test certain things (I kind of avoided tests for graphics, sound, timers, and randomness).
-- Normally I wouldn't put everything in one file, but the CHIP-8 didn't seem to have enough moving parts to merit splitting it up, but I'd definitely want to do that in the future.  At time of writing, the main file is almost 1k lines long (not LOC).
+- Normally I wouldn't put everything in one file, but the CHIP-8 didn't seem to have enough moving parts to merit splitting it up, but I'd definitely want to do that in the future.  At time of writing, the main file is over 1k lines long (not LOC).
 - I haven't tried every single game, so apologies if some of them don't work.
+- When it comes to catching bugs with ROMS, I started out trying to prevent crashes, but then I realized that it may be better to just let them happen as is, as would likely happen on the original system.  I haven't fully picked a side on this yet so I'm leaving the current error catching but avoiding any more.
 
 ## Controls
 Aside from the actual game controls, you may close the window or press ESC to stop the emulator, and you may press L at any time to open the game picker window to load a new game.
