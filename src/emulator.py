@@ -12,27 +12,34 @@ from typing import List, Tuple, Optional
 from pathlib import Path
 
 # region Constants
-# Masks
-UPPER_CHAR_MASK = 240
-LOWER_CHAR_MASK = 15
+# Masks / Sizes
+UPPER_NIBBLE_MASK = 240
+LOWER_NIBBLE_MASK = 15
 BYTE_MASK = 255
 NUM_REPRESENTABLE_INTS_BYTE = 256
+OPCODE_SIZE = 2
+BYTE_SIZE = 8
+HEX_SIZE = 16
 
 # Opcodes
 RETURN_FROM_SUBROUTINE_OPCODE = bytes.fromhex("00ee")
 CLEAR_SCREEN_OPCODE = bytes.fromhex("00e0")
 
 # Memory Addresses
+RAM_SIZE = 4096
+NUM_REGISTERS = 16
 GAME_START_ADDRESS = 512
 INTERPRETER_END_ADDRESS = 80
 
 # Graphics
+DEFAULT_WINDOW_NAME = "ChipPy"
 SCREEN_WIDTH = 64
 SCREEN_HEIGHT = 32
 SCALED_SCREEN_WIDTH = 800
 SCALED_SCREEN_HEIGHT = 400
 SPRITE_WIDTH = 8
-COLOUR_PALETTE = [(0, 0, 0), (0, 255, 0)]
+HEX_CHAR_SPRITE_HEIGHT = 5
+COLOUR_PALETTE = [(0, 0, 0), (0, 255, 0)] # Two colours, black and green
 
 # Timers
 TIMER_DELAY = 1 / 60
@@ -47,6 +54,7 @@ TONE_HZ = 550
 GAMES_PATH = str(Path(__file__).resolve().parent.parent.joinpath("games/.chip8"))
 
 # Controls
+NUM_KEYS = 16
 KEY_LOOKUP = {
     pygame.K_1: 1,
     pygame.K_q: 4,
@@ -67,6 +75,7 @@ KEY_LOOKUP = {
 }
 # endregion
 
+# region Top-level Setup
 # Set up the logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s]:  %(message)s", stream=sys.stdout)
@@ -76,9 +85,10 @@ logger.disabled = "pydevd" not in sys.modules
 random.seed()
 
 # Initialize PyGame
-pygame.mixer.init(SOUND_FREQUENCY, -16, 1, 4096)
+pygame.mixer.init(SOUND_FREQUENCY, -16, 1, SOUND_BUFFER)
 pygame.init()
 pygame.display.init()
+# endregion
 
 
 class WaitForKey:
@@ -103,14 +113,14 @@ class Emulator:
         Constructor.
         """
         # Set up the main members
-        self.ram = bytearray(4096)
-        self.registers = bytearray(16)
+        self.ram = bytearray(RAM_SIZE)
+        self.registers = bytearray(NUM_REGISTERS)
         self.register_i = 0
         self.delay = 0
         self.sound = 0
         self.program_counter = GAME_START_ADDRESS
         self.stack: List[int] = []
-        self.keys: List[bool] = [False] * 16
+        self.keys: List[bool] = [False] * NUM_KEYS
         self.screen: Optional[pygame.Surface] = None
         self.inter_screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), 0, 8)
         self.pixels = np.zeros((SCREEN_WIDTH, SCREEN_HEIGHT), np.ubyte)
@@ -135,7 +145,7 @@ class Emulator:
         self.sound_player = pygame.sndarray.make_sound(sound_wave)
 
         # Set up the window
-        pygame.display.set_caption("ChipPy")
+        pygame.display.set_caption(DEFAULT_WINDOW_NAME)
         self.screen = pygame.display.set_mode((SCALED_SCREEN_WIDTH, SCALED_SCREEN_HEIGHT), 0, 8)
         self.screen.set_palette(COLOUR_PALETTE)
 
@@ -159,18 +169,18 @@ class Emulator:
         self.delay = 0
         self.sound = 0
         self.stack: List[int] = []
-        self.keys: List[bool] = [False] * 16
+        self.keys: List[bool] = [False] * NUM_KEYS
         self.program_counter = GAME_START_ADDRESS
         self.pixels.fill(0)
 
         # Re-initialize memory
-        self.ram = bytearray(4096)
-        self.registers = bytearray(16)
+        self.ram = bytearray(RAM_SIZE)
+        self.registers = bytearray(NUM_REGISTERS)
         self.load_digit_sprites()
 
         # Re-initialize screen
         self.clear_screen()
-        pygame.display.set_caption("ChipPy")
+        pygame.display.set_caption(DEFAULT_WINDOW_NAME)
     # endregion
 
     # region Memory
@@ -444,22 +454,22 @@ class Emulator:
 
     # region Helpers
     @staticmethod
-    def get_upper_char(byte: int) -> int:
+    def get_upper_nibble(byte: int) -> int:
         """
-        Get the upper character (first 4 bits) of the given byte.
-        :param byte: The byte from which to extract the character.
-        :return: The upper character.
+        Get the upper nibble (first 4 bits) of the given byte.
+        :param byte: The byte from which to extract the nibble.
+        :return: The upper nibble.
         """
-        return (byte & UPPER_CHAR_MASK) >> 4
+        return (byte & UPPER_NIBBLE_MASK) >> 4
 
     @staticmethod
-    def get_lower_char(byte: int) -> int:
+    def get_lower_nibble(byte: int) -> int:
         """
-        Get the lower character (last 4 bits) of the given byte.
-        :param byte: The byte from which to extract the character.
-        :return: The lower character.
+        Get the lower nibble (last 4 bits) of the given byte.
+        :param byte: The byte from which to extract the nibble.
+        :return: The lower nibble.
         """
-        return byte & LOWER_CHAR_MASK
+        return byte & LOWER_NIBBLE_MASK
 
     @staticmethod
     def bounded_subtract(minuend: int, subtrahend: int) -> Tuple[int, int]:
@@ -480,9 +490,11 @@ class Emulator:
         """
         Fetches the current instruction and executes it.
         """
-        opcode = self.ram[self.program_counter:self.program_counter + 2]
+        # Determine and run the current instruction
+        opcode = self.ram[self.program_counter:self.program_counter + OPCODE_SIZE]
         self.run_opcode(opcode)
 
+        # If we are not blocked, delay for the next instruction
         if not self.waiting_for_key.is_waiting:
             self.toggle_opcode_timer(True)
 
@@ -491,81 +503,86 @@ class Emulator:
         Route the provided opcode to the correct method to execute it.  Increment the program counter to the next instruction.
         :param opcode: The opcode to execute.
         """
-        self.program_counter += 2
-        first_char = self.get_upper_char(opcode[0])
-        last_char = self.get_lower_char(opcode[1])
+        # Increment the program counter
+        self.program_counter += OPCODE_SIZE
 
+        # Get some common parts which determine the opcode
+        first_nibble = self.get_upper_nibble(opcode[0])
+        last_nibble = self.get_lower_nibble(opcode[1])
+
+        # Route to the correct method depending on the opcode
         if opcode == CLEAR_SCREEN_OPCODE:
             self.opcode_clear_screen(opcode)
         elif opcode == RETURN_FROM_SUBROUTINE_OPCODE:
             self.opcode_return_from_subroutine(opcode)
-        elif first_char == 0:
+        elif first_nibble == 0:
             self.opcode_call_subroutine(opcode)
-        elif first_char == 1:
+        elif first_nibble == 1:
             self.opcode_goto(opcode)
-        elif first_char == 2:
+        elif first_nibble == 2:
             self.opcode_call_subroutine(opcode)
-        elif first_char == 3:
+        elif first_nibble == 3:
             self.opcode_if_equal(opcode)
-        elif first_char == 4:
+        elif first_nibble == 4:
             self.opcode_if_not_equal(opcode)
-        elif first_char == 5 and last_char == 0:
+        elif first_nibble == 5 and last_nibble == 0:
             self.opcode_if_register_equal(opcode)
-        elif first_char == 6:
+        elif first_nibble == 6:
             self.opcode_set_register_value(opcode)
-        elif first_char == 7:
+        elif first_nibble == 7:
             self.opcode_add_value(opcode)
-        elif first_char == 8 and last_char == 0:
+        elif first_nibble == 8 and last_nibble == 0:
             self.opcode_set_register_value_other_register(opcode)
-        elif first_char == 8 and last_char == 1:
+        elif first_nibble == 8 and last_nibble == 1:
             self.opcode_set_register_bitwise_or(opcode)
-        elif first_char == 8 and last_char == 2:
+        elif first_nibble == 8 and last_nibble == 2:
             self.opcode_set_register_bitwise_and(opcode)
-        elif first_char == 8 and last_char == 3:
+        elif first_nibble == 8 and last_nibble == 3:
             self.opcode_set_register_bitwise_xor(opcode)
-        elif first_char == 8 and last_char == 4:
+        elif first_nibble == 8 and last_nibble == 4:
             self.opcode_add_other_register(opcode)
-        elif first_char == 8 and last_char == 5:
+        elif first_nibble == 8 and last_nibble == 5:
             self.opcode_subtract_from_first_register(opcode)
-        elif first_char == 8 and last_char == 6:
+        elif first_nibble == 8 and last_nibble == 6:
             self.opcode_bit_shift_right(opcode)
-        elif first_char == 8 and last_char == 7:
+        elif first_nibble == 8 and last_nibble == 7:
             self.opcode_subtract_from_second_register(opcode)
-        elif first_char == 8 and last_char == 14:
+        elif first_nibble == 8 and last_nibble == 14:
             self.opcode_bit_shift_left(opcode)
-        elif first_char == 9 and last_char == 0:
+        elif first_nibble == 9 and last_nibble == 0:
             self.opcode_if_register_not_equal(opcode)
-        elif first_char == 10:
+        elif first_nibble == 10:
             self.opcode_set_register_i(opcode)
-        elif first_char == 11:
+        elif first_nibble == 11:
             self.opcode_goto_addition(opcode)
-        elif first_char == 12:
+        elif first_nibble == 12:
             self.opcode_random_bitwise_and(opcode)
-        elif first_char == 13:
+        elif first_nibble == 13:
             self.opcode_draw_sprite(opcode)
-        elif first_char == 14 and opcode[1] == 158:
+        elif first_nibble == 14 and opcode[1] == 158:
             self.opcode_if_key_pressed(opcode)
-        elif first_char == 14 and opcode[1] == 161:
+        elif first_nibble == 14 and opcode[1] == 161:
             self.opcode_if_key_not_pressed(opcode)
-        elif first_char == 15 and opcode[1] == 7:
+        elif first_nibble == 15 and opcode[1] == 7:
             self.opcode_get_delay_timer(opcode)
-        elif first_char == 15 and opcode[1] == 10:
+        elif first_nibble == 15 and opcode[1] == 10:
             self.opcode_wait_for_key_press(opcode)
-        elif first_char == 15 and opcode[1] == 21:
+        elif first_nibble == 15 and opcode[1] == 21:
             self.opcode_set_delay_timer(opcode)
-        elif first_char == 15 and opcode[1] == 24:
+        elif first_nibble == 15 and opcode[1] == 24:
             self.opcode_set_sound_timer(opcode)
-        elif first_char == 15 and opcode[1] == 30:
+        elif first_nibble == 15 and opcode[1] == 30:
             self.opcode_register_i_addition(opcode)
-        elif first_char == 15 and opcode[1] == 41:
+        elif first_nibble == 15 and opcode[1] == 41:
             self.opcode_set_register_i_to_hex_sprite_address(opcode)
-        elif first_char == 15 and opcode[1] == 51:
+        elif first_nibble == 15 and opcode[1] == 51:
             self.opcode_binary_coded_decimal(opcode)
-        elif first_char == 15 and opcode[1] == 85:
+        elif first_nibble == 15 and opcode[1] == 85:
             self.opcode_register_dump(opcode)
-        elif first_char == 15 and opcode[1] == 101:
+        elif first_nibble == 15 and opcode[1] == 101:
             self.opcode_register_load(opcode)
         else:
+            # If no match is found, just log an error
             logger.error(f"Unimplemented / Invalid Opcode: {opcode.hex()}.")
 
     def opcode_clear_screen(self, opcode: bytes) -> None:
@@ -581,10 +598,12 @@ class Emulator:
         Return from the current subroutine.
         :param opcode: The opcode to execute.
         """
+        # Catching a mistake which should be on the ROM writer to notice, but prevent returning froma subroutine when we aren't in one
         if len(self.stack) == 0:
-            logger.error("Tried to return from a subroutine when the stack is empty.  Ignoring.")
+            logger.error("Tried to return from a subroutine when not in one.  Ignoring.")
             return
 
+        # Set the program counter to where we were prior to the start of the subroutine
         self.program_counter = self.stack.pop()
         logger.debug(f"Execute Opcode {opcode.hex()}: Return from subroutine, continue at {hex(self.program_counter)}.")
 
@@ -593,7 +612,10 @@ class Emulator:
         Jump to the provided address.
         :param opcode: The opcode to execute.
         """
-        address = (self.get_lower_char(opcode[0]) << 8) + opcode[1]
+        # Get the necessary information from the opcode
+        address = (self.get_lower_nibble(opcode[0]) << BYTE_SIZE) + opcode[1]
+
+        # Perform the instruction
         self.program_counter = address
         logger.debug(f"Execute Opcode {opcode.hex()}: Jump to address {hex(address)}.")
 
@@ -602,7 +624,10 @@ class Emulator:
         Call the subroutine at the given address.
         :param opcode: The opcode to execute.
         """
-        address = (self.get_lower_char(opcode[0]) << 8) + opcode[1]
+        # Get the necessary information from the opcode
+        address = (self.get_lower_nibble(opcode[0]) << BYTE_SIZE) + opcode[1]
+
+        # Perform the instruction
         self.stack.append(self.program_counter)
         self.program_counter = address
         logger.debug(f"Execute Opcode {opcode.hex()}: Call subroutine at address {hex(address)}.")
@@ -612,11 +637,15 @@ class Emulator:
         Skip the next instruction if the value of the provided register is equal to the provided value.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         register_value = self.registers[register]
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if register {register}'s value ({register_value}) is {opcode[1]}.")
+
+        # Skip the next instruction if the value is equal
         if register_value == opcode[1]:
-            self.program_counter += 2
+            self.program_counter += OPCODE_SIZE
             logger.debug("Instruction skipped.")
         else:
             logger.debug("Instruction not skipped.")
@@ -626,11 +655,15 @@ class Emulator:
         Skip the next instruction if the value of the provided register is not equal to the provided value.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         register_value = self.registers[register]
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if register {register}'s value ({register_value}) is not {opcode[1]}.")
+
+        # Skip the next instruction if the value is not equal
         if register_value != opcode[1]:
-            self.program_counter += 2
+            self.program_counter += OPCODE_SIZE
             logger.debug("Instruction skipped.")
         else:
             logger.debug("Instruction not skipped.")
@@ -640,13 +673,17 @@ class Emulator:
         Skip the next instruction if the value of the first provided register is equal to the value of the second provided register.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         first_register_value = self.registers[first_register]
         second_register_value = self.registers[second_register]
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if register {first_register}'s value ({first_register_value}) is equal to register {second_register}'s value ({second_register_value}).")
+
+        # Skip the next instruction if the values are equal
         if first_register_value == second_register_value:
-            self.program_counter += 2
+            self.program_counter += OPCODE_SIZE
             logger.debug("Instruction skipped.")
         else:
             logger.debug("Instruction not skipped.")
@@ -656,7 +693,10 @@ class Emulator:
         Set the value of the provided register to the provided value.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
+
+        # Perform the instruction
         self.registers[register] = opcode[1]
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {register} to {opcode[1]}.")
 
@@ -665,8 +705,11 @@ class Emulator:
         Adds the provided value to the value of the provided register.  The carry flag (register 15) is not set.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
-        self.registers[register] = (self.registers[register] + opcode[1]) % 256
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
+
+        # Perform the instruction
+        self.registers[register] = (self.registers[register] + opcode[1]) % NUM_REPRESENTABLE_INTS_BYTE
         logger.debug(f"Execute Opcode {opcode.hex()}: Add {opcode[1]} to the value of register {register}.")
 
     def opcode_set_register_value_other_register(self, opcode: bytes) -> None:
@@ -674,9 +717,12 @@ class Emulator:
         Set the value of the first provided register to the value of the second provided register.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         second_register_value = self.registers[second_register]
+
+        # Perform the instruction
         self.registers[first_register] = second_register_value
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {first_register} to the value of register {second_register}'s value ({second_register_value}).")
 
@@ -685,11 +731,14 @@ class Emulator:
         Sets the value of the first provided register to the bitwise or of itself and the value of the second provided register.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         first_register_value = self.registers[first_register]
         second_register_value = self.registers[second_register]
         result = first_register_value | second_register_value
+
+        # Perform the instruction
         self.registers[first_register] = result
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {first_register} to the bitwise or of itself and the value of register {second_register} ({first_register_value} | {second_register_value} = {result}).")
 
@@ -698,11 +747,14 @@ class Emulator:
         Sets the value of the first provided register to the bitwise and of itself and the value of the second provided register.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         first_register_value = self.registers[first_register]
         second_register_value = self.registers[second_register]
         result = first_register_value & second_register_value
+
+        # Perform the instruction
         self.registers[first_register] = result
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {first_register} to the bitwise and of itself and the value of register {second_register} ({first_register_value} & {second_register_value} = {result}).")
 
@@ -711,11 +763,14 @@ class Emulator:
         Sets the value of the first provided register to the bitwise xor of itself and the value of the second provided register.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         first_register_value = self.registers[first_register]
         second_register_value = self.registers[second_register]
         result = first_register_value ^ second_register_value
+
+        # Perform the instruction
         self.registers[first_register] = result
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {first_register} to the bitwise xor of itself and the value of register {second_register} ({first_register_value} ^ {second_register_value} = {result}).")
 
@@ -724,13 +779,16 @@ class Emulator:
         Sets the value of the first provided register to the sum of itself and the value of the second provided register.  The carry flag (register 15) is set.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         first_register_value = self.registers[first_register]
         second_register_value = self.registers[second_register]
         sum_of_registers = first_register_value + second_register_value
-        result = sum_of_registers % 256
-        carry = 1 if sum_of_registers >= 256 else 0
+        result = sum_of_registers % NUM_REPRESENTABLE_INTS_BYTE
+        carry = 1 if sum_of_registers >= NUM_REPRESENTABLE_INTS_BYTE else 0
+
+        # Perform the instruction
         self.registers[first_register] = result
         self.registers[15] = carry
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {first_register} to the sum of itself and the value of register {second_register} ({first_register_value} + {second_register_value} = {result}, carry = {carry}).")
@@ -740,11 +798,14 @@ class Emulator:
         Sets the value of the first provided register to the difference of itself and the value of the second provided register.  The not borrow flag (register 15) is set.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         first_register_value = self.registers[first_register]
         second_register_value = self.registers[second_register]
         result, not_borrow = self.bounded_subtract(first_register_value, second_register_value)
+
+        # Perform the instruction
         self.registers[first_register] = result
         self.registers[15] = not_borrow
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {first_register} to the difference of itself and the value of register {second_register} ({first_register_value} - {second_register_value} = {result}, not borrow = {not_borrow}).")
@@ -754,10 +815,13 @@ class Emulator:
         Shift the value of the first provided register to the right by 1.  Set register 15 to the value of the least significant bit before the operation.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
         first_register_value = self.registers[first_register]
         bit_shift = first_register_value >> 1
         least_significant_bit = first_register_value & 1
+
+        # Perform the instruction
         self.registers[first_register] = bit_shift
         self.registers[15] = least_significant_bit
         logger.debug(f"Execute Opcode {opcode.hex()}: Shift the value of register {first_register} to the right by 1 ({first_register_value} >> 1 = {bit_shift}, previous least significant bit = {least_significant_bit}).")
@@ -767,11 +831,14 @@ class Emulator:
         Sets the value of the first provided register to the difference of the value of the second provided register and itself.  The not borrow flag (register 15) is set.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         first_register_value = self.registers[first_register]
         second_register_value = self.registers[second_register]
         result, not_borrow = self.bounded_subtract(second_register_value, first_register_value)
+
+        # Perform the instruction
         self.registers[first_register] = result
         self.registers[15] = not_borrow
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {first_register} to the difference of the value of register {second_register} and itself ({second_register_value} - {first_register_value} = {result}, not borrow = {not_borrow}).")
@@ -781,10 +848,13 @@ class Emulator:
         Shift the value of the first provided register to the left by 1.  Set register 15 to the value of the most significant bit before the operation.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
         first_register_value = self.registers[first_register]
         bit_shift = (first_register_value << 1) & BYTE_MASK
         most_significant_bit = 1 if first_register_value & 128 == 128 else 0
+
+        # Perform the instruction
         self.registers[first_register] = bit_shift
         self.registers[15] = most_significant_bit
         logger.debug(f"Execute Opcode {opcode.hex()}: Shift the value of register {first_register} to the left by 1 ({first_register_value} << 1 = {bit_shift}, previous most significant bit = {most_significant_bit}).")
@@ -794,13 +864,17 @@ class Emulator:
         Skip the next instruction if the value of the first provided register is not equal to the value of the second provided register.
         :param opcode: The opcode to execute.
         """
-        first_register = self.get_lower_char(opcode[0])
-        second_register = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        first_register = self.get_lower_nibble(opcode[0])
+        second_register = self.get_upper_nibble(opcode[1])
         first_register_value = self.registers[first_register]
         second_register_value = self.registers[second_register]
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if register {first_register}'s value ({first_register_value}) is not equal to register {second_register}'s value ({second_register_value}).")
+
+        # Skip the next instruction if the values are not equal
         if first_register_value != second_register_value:
-            self.program_counter += 2
+            self.program_counter += OPCODE_SIZE
             logger.debug("Instruction skipped.")
         else:
             logger.debug("Instruction not skipped.")
@@ -810,7 +884,10 @@ class Emulator:
         Sets the value of register I to the provided value.
         :param opcode: The opcode to execute.
         """
-        address = (self.get_lower_char(opcode[0]) << 8) + opcode[1]
+        # Get the necessary information from the opcode
+        address = (self.get_lower_nibble(opcode[0]) << BYTE_SIZE) + opcode[1]
+
+        # Perform the instruction
         self.register_i = address
         logger.debug(f"Execute Opcode {opcode.hex()}: Set register I to {hex(address)}.")
 
@@ -819,8 +896,11 @@ class Emulator:
         Jump to the provided address plus the value of register 0.
         :param opcode: The opcode to execute.
         """
-        address = (self.get_lower_char(opcode[0]) << 8) + opcode[1]
+        # Get the necessary information from the opcode
+        address = (self.get_lower_nibble(opcode[0]) << BYTE_SIZE) + opcode[1]
         register_value = self.registers[0]
+
+        # Perform the instruction
         self.program_counter = address + register_value
         logger.debug(f"Execute Opcode {opcode.hex()}: Jump to the provided address plus the value of register 0 ({hex(address)} + {hex(register_value)} = {hex(self.program_counter)}).")
 
@@ -829,9 +909,12 @@ class Emulator:
         Set the value of the provided register to the bitwise and of the provided value and a random number [0, 255].
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
-        random_value = random.randint(0, 255)
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
+        random_value = random.randint(0, NUM_REPRESENTABLE_INTS_BYTE - 1)
         result = opcode[1] & random_value
+
+        # Perform the instruction
         self.registers[register] = result
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {register} to the bitwise and of the provided value and a random number [0, 255] ({opcode[1]} & {random_value} = {result}).")
 
@@ -840,23 +923,45 @@ class Emulator:
         Draws the sprite with the provided height found at the address denoted by the value of register I to the provided x and y coordinates.  The collision flag (register 15) is set to 1 if a pixel was unset, 0 otherwise.
         :param opcode: The opcode to execute.
         """
-        register_x = self.get_lower_char(opcode[0])
-        register_y = self.get_upper_char(opcode[1])
+        # Get the necessary information from the opcode
+        register_x = self.get_lower_nibble(opcode[0])
+        register_y = self.get_upper_nibble(opcode[1])
         register_x_value = self.registers[register_x]
         register_y_value = self.registers[register_y]
-        height = self.get_lower_char(opcode[1])
+        height = self.get_lower_nibble(opcode[1])
+
+        # Start with the pixel unset flag set to off
         pixel_unset = 0
+
+        # For each row in the height of the sprite
         for row in range(height):
+            # Get the byte for the giuven row
             byte = self.ram[self.register_i + row]
+
+            # Get the y-coordinate, wrapping the screen if necessary
             y_coordinate = (register_y_value + row) % SCREEN_HEIGHT
+
+            # For each pixel in the row
             for column in range(SPRITE_WIDTH):
+                # Get the x-coordinate, wrapping the screen if necessary
                 x_coordinate = (register_x_value + column) % SCREEN_WIDTH
+
+                # Get the particular pixel in the sprite
                 pixel = ((byte >> (SPRITE_WIDTH - 1 - column)) & 1)
+
+                # Set the flag if a pixel which was previously on would be turned off, signifying a collision
                 if pixel_unset == 0 and self.pixels[x_coordinate, y_coordinate] == 1 and pixel == 1:
                     pixel_unset = 1
+
+                # Set the pixel, XOR to turn off in the case of a collision
                 self.pixels[x_coordinate, y_coordinate] ^= pixel
+
+        # Set the pixel unset flag register
         self.registers[15] = pixel_unset
+
+        # Update the display
         self.draw_to_display()
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Drawing the sprite with a height of {height} and found at address {self.register_i} to the screen at the x-cooordinate from the value of register {register_x} and y-coordinate from the value of register {register_y} ({register_x_value, register_y_value}).")
 
     def opcode_if_key_pressed(self, opcode: bytes) -> None:
@@ -864,12 +969,16 @@ class Emulator:
         Skip the next instruction if the key represented by the value of the provided register is pressed.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         key = self.registers[register]
         pressed = self.keys[key]
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if the key represented by the value of register {register} ({key}) is pressed ({pressed}).")
+
+        # Skip the next instruction if the key is pressed
         if pressed:
-            self.program_counter += 2
+            self.program_counter += OPCODE_SIZE
             logger.debug("Instruction skipped.")
         else:
             logger.debug("Instruction not skipped.")
@@ -879,12 +988,16 @@ class Emulator:
         Skip the next instruction if the key represented by the value of the provided register is not pressed.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         key = self.registers[register]
         pressed = self.keys[key]
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Skip next instruction if the key represented by the value of register {register} ({key}) is not pressed ({pressed}).")
+
+        # Skip the next instruction if the key is not pressed
         if not pressed:
-            self.program_counter += 2
+            self.program_counter += OPCODE_SIZE
             logger.debug("Instruction skipped.")
         else:
             logger.debug("Instruction not skipped.")
@@ -894,7 +1007,10 @@ class Emulator:
         Sets the value of the provided register to the value of the delay timer.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
+
+        # Perform the instruction
         self.registers[register] = self.delay
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register {register} to the value of the delay timer ({self.registers[register]}).")
 
@@ -903,7 +1019,10 @@ class Emulator:
         Block all execution until a keypress is detected, at which point it is stored in the provided register and execution may resume.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
+
+        # Perform the instruction
         self.waiting_for_key.is_waiting = True
         self.waiting_for_key.storing_register = register
         logger.debug(f"Execute Opcode {opcode.hex()}: Blocking operation until a keypress is detected and stored in register {register}.")
@@ -913,12 +1032,20 @@ class Emulator:
         Sets the delay timer to the value of the provided register.
         :param opcode: The opcode to execute.
         """
+        # Immediately toggle off the timer
         self.toggle_delay_timer(False)
-        register = self.get_lower_char(opcode[0])
+
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         register_value = self.registers[register]
+
+        # Perform the instruction
         self.delay = register_value
+
+        # Start the timer if the delay is positive
         if self.delay > 0:
             self.toggle_delay_timer(True)
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of the delay timer to value of register {register} ({register_value}).")
 
     def opcode_set_sound_timer(self, opcode: bytes) -> None:
@@ -926,13 +1053,21 @@ class Emulator:
         Sets the sound timer to the value of the provided register, playing a sound if the value is greater than 0.
         :param opcode: The opcode to execute.
         """
+        # Immediately toggle off the timer
         self.toggle_sound_timer(False)
-        register = self.get_lower_char(opcode[0])
+
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         register_value = self.registers[register]
+
+        # Perform the instruction
         self.sound = register_value
+
+        # Start the timer and start the sound if the delay is positive
         if self.sound > 0:
             self.sound_player.play(-1)
             self.toggle_sound_timer(True)
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of the delay timer to value of register {register} ({register_value}).")
 
     def opcode_register_i_addition(self, opcode: bytes) -> None:
@@ -940,12 +1075,15 @@ class Emulator:
         Add the value of the provided register to register I.  The overflow flag (register 15) is set.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         register_value = self.registers[register]
         register_i_value = self.register_i
         sum_of_registers = register_i_value + register_value
-        result = sum_of_registers % 4096
-        overflow = 1 if sum_of_registers >= 4096 else 0
+        result = sum_of_registers % RAM_SIZE
+        overflow = 1 if sum_of_registers >= RAM_SIZE else 0
+
+        # Perform the instruction
         self.register_i = result
         self.registers[15] = overflow
         logger.debug(f"Execute Opcode {opcode.hex()}: Adds the value of register {register} to the value of register I {register} ({register_i_value} + {register_value} = {result}, overflow = {overflow}).")
@@ -955,9 +1093,12 @@ class Emulator:
         Sets the value of register I to the address of the hexadecimal sprite represented by the value in the provided register.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         register_value = self.registers[register]
-        self.register_i = register_value * 5
+
+        # Perform the instruction
+        self.register_i = register_value * HEX_CHAR_SPRITE_HEIGHT
         logger.debug(f"Execute Opcode {opcode.hex()}: Set the value of register I to the address ({self.register_i}) of the hexadecimal sprite represented by the value of register {register} ({register_value}).")
 
     def opcode_binary_coded_decimal(self, opcode: bytes) -> None:
@@ -968,11 +1109,14 @@ class Emulator:
         Units digit stored in memory at the location of the value of register I + 2.
         :param opcode: The opcode to execute.
         """
-        register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        register = self.get_lower_nibble(opcode[0])
         register_value = self.registers[register]
         hundreds = register_value // 100 % 10
         tens = register_value // 10 % 10
         units = register_value % 10
+
+        # Perform the instruction
         self.ram[self.register_i] = hundreds
         self.ram[self.register_i + 1] = tens
         self.ram[self.register_i + 2] = units
@@ -983,23 +1127,37 @@ class Emulator:
         Store the values of all registers from register 0 to the provided register in memory, starting at the value of register I.
         :param opcode: The opcode to execute.
         """
-        last_register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        last_register = self.get_lower_nibble(opcode[0])
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Dumping the values of all registers from register 0 to register {last_register} into memory, starting at the value of register I ({hex(self.register_i)}).")
+
+        # Go through each register in the provided range
         for register in range(last_register + 1):
+            # Get the address at which to dump
             target_address = self.register_i + register
-            register_value = self.registers[register]
-            self.ram[target_address] = register_value
-            logger.debug(f"Register {register}'s value ({register_value}) stored at address {target_address}.")
+
+            # Dump the value
+            self.ram[target_address] = self.registers[register]
+            logger.debug(
+                f"Register {register}'s value ({self.registers[register]}) stored at address {target_address}.")
 
     def opcode_register_load(self, opcode: bytes) -> None:
         """
         Load the values of all registers from register 0 to the provided register from memory, starting at the value of register I.
         :param opcode: The opcode to execute.
         """
-        last_register = self.get_lower_char(opcode[0])
+        # Get the necessary information from the opcode
+        last_register = self.get_lower_nibble(opcode[0])
+
         logger.debug(f"Execute Opcode {opcode.hex()}: Loading the values of all registers from register 0 to register {last_register} from memory, starting at the value of register I ({hex(self.register_i)}).")
+
+        # Go through each register in the provided range
         for register in range(last_register + 1):
+            # Get the address from which to load
             target_address = self.register_i + register
+
+            # Load the value
             self.registers[register] = self.ram[target_address]
             logger.debug(f"Register {register}'s value ({self.registers[register]}) loaded from address {target_address}.")
     # endregion

@@ -1,6 +1,6 @@
 from unittest import mock
 
-from src.emulator import Emulator, GAME_START_ADDRESS, INTERPRETER_END_ADDRESS
+from src.emulator import Emulator, GAME_START_ADDRESS, INTERPRETER_END_ADDRESS, RAM_SIZE, HEX_SIZE, OPCODE_SIZE
 
 
 class TestHelperMethods:
@@ -8,37 +8,37 @@ class TestHelperMethods:
         self.emulator = Emulator()
 
     def test_load_digit_sprites(self):
-        self.emulator.ram = bytearray(4096)
+        self.emulator.ram = bytearray(RAM_SIZE)
 
         self.emulator.load_digit_sprites()
         for index, byte in enumerate(self.emulator.ram):
             if index >= INTERPRETER_END_ADDRESS:
                 assert byte == 0, "Ram outside of the sprite storage was modified."
-        assert self.emulator.ram[0] == int("f0", 16), "The first character of the 0 sprite is incorrect."
-        assert self.emulator.ram[1] == int("90", 16), "The second character of the 0 sprite is incorrect."
-        assert self.emulator.ram[2] == int("90", 16), "The third character of the 0 sprite is incorrect."
-        assert self.emulator.ram[3] == int("90", 16), "The fourth character of the 0 sprite is incorrect."
-        assert self.emulator.ram[4] == int("f0", 16), "The fifth character of the 0 sprite is incorrect."
-        assert self.emulator.ram[35] == int("f0", 16), "The first character of the 7 sprite is incorrect."
-        assert self.emulator.ram[36] == int("10", 16), "The second character of the 7 sprite is incorrect."
-        assert self.emulator.ram[37] == int("20", 16), "The third character of the 7 sprite is incorrect."
-        assert self.emulator.ram[38] == int("40", 16), "The fourth character of the 7 sprite is incorrect."
-        assert self.emulator.ram[39] == int("40", 16), "The fifth character of the 7 sprite is incorrect."
-        assert self.emulator.ram[75] == int("f0", 16), "The first character of the F sprite is incorrect."
-        assert self.emulator.ram[76] == int("80", 16), "The second character of the F sprite is incorrect."
-        assert self.emulator.ram[77] == int("f0", 16), "The third character of the F sprite is incorrect."
-        assert self.emulator.ram[78] == int("80", 16), "The fourth character of the F sprite is incorrect."
-        assert self.emulator.ram[79] == int("80", 16), "The fifth character of the F sprite is incorrect."
+        assert self.emulator.ram[0] == int("f0", HEX_SIZE), "The first byte of the 0 sprite is incorrect."
+        assert self.emulator.ram[1] == int("90", HEX_SIZE), "The second byte of the 0 sprite is incorrect."
+        assert self.emulator.ram[2] == int("90", HEX_SIZE), "The third byte of the 0 sprite is incorrect."
+        assert self.emulator.ram[3] == int("90", HEX_SIZE), "The fourth byte of the 0 sprite is incorrect."
+        assert self.emulator.ram[4] == int("f0", HEX_SIZE), "The fifth byte of the 0 sprite is incorrect."
+        assert self.emulator.ram[35] == int("f0", HEX_SIZE), "The first byte of the 7 sprite is incorrect."
+        assert self.emulator.ram[36] == int("10", HEX_SIZE), "The second byte of the 7 sprite is incorrect."
+        assert self.emulator.ram[37] == int("20", HEX_SIZE), "The third byte of the 7 sprite is incorrect."
+        assert self.emulator.ram[38] == int("40", HEX_SIZE), "The fourth byte of the 7 sprite is incorrect."
+        assert self.emulator.ram[39] == int("40", HEX_SIZE), "The fifth byte of the 7 sprite is incorrect."
+        assert self.emulator.ram[75] == int("f0", HEX_SIZE), "The first byte of the F sprite is incorrect."
+        assert self.emulator.ram[76] == int("80", HEX_SIZE), "The second byte of the F sprite is incorrect."
+        assert self.emulator.ram[77] == int("f0", HEX_SIZE), "The third byte of the F sprite is incorrect."
+        assert self.emulator.ram[78] == int("80", HEX_SIZE), "The fourth byte of the F sprite is incorrect."
+        assert self.emulator.ram[79] == int("80", HEX_SIZE), "The fifth byte of the F sprite is incorrect."
 
-    def test_get_upper_char(self):
-        assert self.emulator.get_upper_char(int("5b", 16)) == 5, "Could not get correct upper character in normal byte."
-        assert self.emulator.get_upper_char(int("50", 16)) == 5, "Could not get correct upper character in byte with 0 lower character."
-        assert self.emulator.get_upper_char(int("b", 16)) == 0, "Could not get correct upper character in byte no upper character."
+    def test_get_upper_nibble(self):
+        assert self.emulator.get_upper_nibble(int("5b", HEX_SIZE)) == 5, "Could not get correct upper nibble in normal byte."
+        assert self.emulator.get_upper_nibble(int("50", HEX_SIZE)) == 5, "Could not get correct upper nibble in byte with 0 lower nibble."
+        assert self.emulator.get_upper_nibble(int("b", HEX_SIZE)) == 0, "Could not get correct upper nibble in byte no upper nibble."
 
-    def test_get_lower_char(self):
-        assert self.emulator.get_lower_char(int("5b", 16)) == 11, "Could not get correct lower character in normal byte."
-        assert self.emulator.get_lower_char(int("50", 16)) == 0, "Could not get correct lower character in byte with 0 lower character."
-        assert self.emulator.get_lower_char(int("b", 16)) == 11, "Could not get correct lower character in byte no upper character."
+    def test_get_lower_nibble(self):
+        assert self.emulator.get_lower_nibble(int("5b", HEX_SIZE)) == 11, "Could not get correct lower nibble in normal byte."
+        assert self.emulator.get_lower_nibble(int("50", HEX_SIZE)) == 0, "Could not get correct lower nibble in byte with 0 lower nibble."
+        assert self.emulator.get_lower_nibble(int("b", HEX_SIZE)) == 11, "Could not get correct lower nibble in byte no upper nibble."
 
     def test_bounded_subtract(self):
         assert self.emulator.bounded_subtract(200, 100) == (100, 1), "Incorrect subtraction with positive result."
@@ -71,19 +71,19 @@ class TestIndividualOpcodes:
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
 
         self.emulator.opcode_goto(bytes.fromhex("14e5"))
-        assert self.emulator.program_counter == int("4e5", 16), "Program counter incorrect after jump opcode."
+        assert self.emulator.program_counter == int("4e5", HEX_SIZE), "Program counter incorrect after jump opcode."
 
     def test_opcode_call_subroutine(self):
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
         assert len(self.emulator.stack) == 0, "Stack starting out non-empty."
 
         self.emulator.opcode_call_subroutine(bytes.fromhex("2578"))
-        assert self.emulator.program_counter == int("578", 16), "Program counter incorrect after subroutine call."
+        assert self.emulator.program_counter == int("578", HEX_SIZE), "Program counter incorrect after subroutine call."
         assert len(self.emulator.stack) == 1 and self.emulator.stack[0] == GAME_START_ADDRESS, "Previous program counter not added to the stack."
 
         self.emulator.opcode_call_subroutine(bytes.fromhex("2a23"))
-        assert self.emulator.program_counter == int("a23", 16), "Program counter incorrect after subroutine call."
-        assert len(self.emulator.stack) == 2 and self.emulator.stack[1] == int("578", 16), "Previous program counter not added to the stack."
+        assert self.emulator.program_counter == int("a23", HEX_SIZE), "Program counter incorrect after subroutine call."
+        assert len(self.emulator.stack) == 2 and self.emulator.stack[1] == int("578", HEX_SIZE), "Previous program counter not added to the stack."
         assert len(self.emulator.stack) == 2 and self.emulator.stack[0] == GAME_START_ADDRESS, "Earlier stack value was modified."
 
     def test_opcode_if_equal(self):
@@ -93,33 +93,33 @@ class TestIndividualOpcodes:
         self.emulator.opcode_if_equal(bytes.fromhex("3698"))
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register value not matching."
 
-        self.emulator.registers[6] = int("98", 16)
+        self.emulator.registers[6] = int("98", HEX_SIZE)
         self.emulator.opcode_if_equal(bytes.fromhex("3698"))
-        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + OPCODE_SIZE, "Next instruction was not skipped when it should have been."
 
     def test_opcode_if_not_equal(self):
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
 
-        self.emulator.registers[6] = int("98", 16)
+        self.emulator.registers[6] = int("98", HEX_SIZE)
         self.emulator.opcode_if_not_equal(bytes.fromhex("3698"))
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register value matching."
 
-        self.emulator.registers[6] = int("ff", 16)
+        self.emulator.registers[6] = int("ff", HEX_SIZE)
         self.emulator.opcode_if_not_equal(bytes.fromhex("3698"))
-        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + OPCODE_SIZE, "Next instruction was not skipped when it should have been."
 
     def test_opcode_if_register_equal(self):
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
 
-        self.emulator.registers[10] = int("11", 16)
-        self.emulator.registers[4] = int("12", 16)
+        self.emulator.registers[10] = int("11", HEX_SIZE)
+        self.emulator.registers[4] = int("12", HEX_SIZE)
         self.emulator.opcode_if_register_equal(bytes.fromhex("5a40"))
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register values matching."
 
-        self.emulator.registers[10] = int("40", 16)
-        self.emulator.registers[4] = int("40", 16)
+        self.emulator.registers[10] = int("40", HEX_SIZE)
+        self.emulator.registers[4] = int("40", HEX_SIZE)
         self.emulator.opcode_if_register_equal(bytes.fromhex("5a40"))
-        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + OPCODE_SIZE, "Next instruction was not skipped when it should have been."
 
     def test_opcode_set_register_value(self):
         for register in self.emulator.registers:
@@ -128,7 +128,7 @@ class TestIndividualOpcodes:
         self.emulator.opcode_set_register_value(bytes.fromhex("6133"))
         for index, register in enumerate(self.emulator.registers):
             if index == 1:
-                assert register == int("33", 16), "Register not set to correct value."
+                assert register == int("33", HEX_SIZE), "Register not set to correct value."
             else:
                 assert register == 0, "Different register than target had its value modified."
 
@@ -349,28 +349,28 @@ class TestIndividualOpcodes:
     def test_opcode_if_register_not_equal(self):
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
 
-        self.emulator.registers[10] = int("40", 16)
-        self.emulator.registers[4] = int("40", 16)
+        self.emulator.registers[10] = int("40", HEX_SIZE)
+        self.emulator.registers[4] = int("40", HEX_SIZE)
         self.emulator.opcode_if_register_not_equal(bytes.fromhex("9a40"))
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter was changed despite register values not matching."
 
-        self.emulator.registers[10] = int("11", 16)
-        self.emulator.registers[4] = int("12", 16)
+        self.emulator.registers[10] = int("11", HEX_SIZE)
+        self.emulator.registers[4] = int("12", HEX_SIZE)
         self.emulator.opcode_if_register_not_equal(bytes.fromhex("9a40"))
-        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + OPCODE_SIZE, "Next instruction was not skipped when it should have been."
 
     def test_opcode_set_register_i(self):
         assert self.emulator.register_i == 0, "Register I starting at an unexpected value."
 
         self.emulator.opcode_set_register_i(bytes.fromhex("a491"))
-        assert self.emulator.register_i == int("491", 16), "Register I set to the wrong value."
+        assert self.emulator.register_i == int("491", HEX_SIZE), "Register I set to the wrong value."
 
     def test_opcode_goto_addition(self):
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
 
         self.emulator.registers[0] = 20
         self.emulator.opcode_goto_addition(bytes.fromhex("b5b2"))
-        assert self.emulator.program_counter == int("5b2", 16) + 20, "Program counter incorrect after jump opcode."
+        assert self.emulator.program_counter == int("5b2", HEX_SIZE) + 20, "Program counter incorrect after jump opcode."
 
     def test_opcode_if_key_pressed(self):
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
@@ -382,7 +382,7 @@ class TestIndividualOpcodes:
 
         self.emulator.keys[6] = True
         self.emulator.opcode_if_key_pressed(bytes.fromhex("e49e"))
-        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + OPCODE_SIZE, "Next instruction was not skipped when it should have been."
 
     def test_opcode_if_key_not_pressed(self):
         assert self.emulator.program_counter == GAME_START_ADDRESS, "Program counter starting at an unexpected value."
@@ -395,7 +395,7 @@ class TestIndividualOpcodes:
 
         self.emulator.keys[6] = False
         self.emulator.opcode_if_key_not_pressed(bytes.fromhex("e4a1"))
-        assert self.emulator.program_counter == GAME_START_ADDRESS + 2, "Next instruction was not skipped when it should have been."
+        assert self.emulator.program_counter == GAME_START_ADDRESS + OPCODE_SIZE, "Next instruction was not skipped when it should have been."
 
     def test_opcode_get_delay_timer(self):
         assert self.emulator.delay == 0, "Delay timer starting at an unexpected value."
@@ -444,11 +444,11 @@ class TestIndividualOpcodes:
         self.emulator.registers[4] = 11
         self.emulator.opcode_set_register_i_to_hex_sprite_address(bytes.fromhex("f429"))
         assert self.emulator.register_i == 55, "Register I was not set to the correct address for the given sprite."
-        assert self.emulator.ram[self.emulator.register_i] == int("e0", 16), "The first character of the B sprite is incorrect."
-        assert self.emulator.ram[self.emulator.register_i + 1] == int("90", 16), "The second character of the B sprite is incorrect."
-        assert self.emulator.ram[self.emulator.register_i + 2] == int("e0", 16), "The third character of the B sprite is incorrect."
-        assert self.emulator.ram[self.emulator.register_i + 3] == int("90", 16), "The fourth character of the B sprite is incorrect."
-        assert self.emulator.ram[self.emulator.register_i + 4] == int("e0", 16), "The fifth character of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i] == int("e0", HEX_SIZE), "The first byte of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i + 1] == int("90", HEX_SIZE), "The second byte of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i + 2] == int("e0", HEX_SIZE), "The third byte of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i + 3] == int("90", HEX_SIZE), "The fourth byte of the B sprite is incorrect."
+        assert self.emulator.ram[self.emulator.register_i + 4] == int("e0", HEX_SIZE), "The fifth byte of the B sprite is incorrect."
 
     def test_opcode_binary_coded_decimal(self):
         for index, byte in enumerate(self.emulator.ram):
