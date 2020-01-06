@@ -559,215 +559,215 @@ class TestOpcodeRouting:
     @mock.patch.object(Emulator, "opcode_call_subroutine")
     def test_call_machine_code_routine(self, mock_method):
         opcode = bytes.fromhex("0d52")
-        bad_opcode = bytes.fromhex("00ee")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_clear_screen")
     def test_clear_screen(self, mock_method):
         opcode = bytes.fromhex("00e0")
-        bad_opcode = bytes.fromhex("00ee")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_return_from_subroutine")
     def test_return_from_subroutine(self, mock_method):
         opcode = bytes.fromhex("00ee")
-        bad_opcode = bytes.fromhex("00e0")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_goto")
     def test_goto(self, mock_method):
         opcode = bytes.fromhex("132a")
-        bad_opcode = bytes.fromhex("332a")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_call_subroutine")
     def test_call_subroutine(self, mock_method):
         opcode = bytes.fromhex("232a")
-        bad_opcode = bytes.fromhex("332a")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_if_equal")
     def test_if_equal(self, mock_method):
         opcode = bytes.fromhex("332a")
-        bad_opcode = bytes.fromhex("132a")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_if_not_equal")
     def test_if_not_equal(self, mock_method):
         opcode = bytes.fromhex("432a")
-        bad_opcode = bytes.fromhex("132a")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_if_register_equal")
     def test_if_register_equal(self, mock_method):
         opcode = bytes.fromhex("5320")
-        bad_opcode = bytes.fromhex("9320")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_register_value")
     def test_set_register_value(self, mock_method):
         opcode = bytes.fromhex("6133")
-        bad_opcode = bytes.fromhex("5321")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_add_value")
     def test_add_value(self, mock_method):
         opcode = bytes.fromhex("7433")
-        bad_opcode = bytes.fromhex("6133")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_return_from_subroutine")
     def test_return_from_subroutine(self, mock_method):
         opcode = bytes.fromhex("00EE")
-        bad_opcode = bytes.fromhex("7433")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_register_value_other_register")
     def test_set_register_value_other_register(self, mock_method):
         opcode = bytes.fromhex("8480")
-        bad_opcode = bytes.fromhex("00EE")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_register_bitwise_or")
     def test_set_register_bitwise_or(self, mock_method):
         opcode = bytes.fromhex("8481")
-        bad_opcode = bytes.fromhex("8480")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_register_bitwise_and")
     def test_set_register_bitwise_and(self, mock_method):
         opcode = bytes.fromhex("8482")
-        bad_opcode = bytes.fromhex("8481")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_register_bitwise_xor")
     def test_set_register_bitwise_xor(self, mock_method):
         opcode = bytes.fromhex("8483")
-        bad_opcode = bytes.fromhex("8482")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_add_other_register")
     def test_add_other_register(self, mock_method):
         opcode = bytes.fromhex("8484")
-        bad_opcode = bytes.fromhex("8483")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_subtract_from_first_register")
     def test_subtract_from_first_register(self, mock_method):
         opcode = bytes.fromhex("8485")
-        bad_opcode = bytes.fromhex("8484")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_bit_shift_right")
     def test_bit_shift_right(self, mock_method):
         opcode = bytes.fromhex("8486")
-        bad_opcode = bytes.fromhex("848e")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_subtract_from_second_register")
     def test_subtract_from_second_register(self, mock_method):
         opcode = bytes.fromhex("8487")
-        bad_opcode = bytes.fromhex("8485")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_bit_shift_left")
     def test_bit_shift_left(self, mock_method):
         opcode = bytes.fromhex("848e")
-        bad_opcode = bytes.fromhex("8486")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_if_register_not_equal")
     def test_if_register_not_equal(self, mock_method):
         opcode = bytes.fromhex("9320")
-        bad_opcode = bytes.fromhex("5320")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_register_i")
     def test_set_register_i(self, mock_method):
         opcode = bytes.fromhex("a841")
-        bad_opcode = bytes.fromhex("9320")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_goto_addition")
     def test_goto_addition(self, mock_method):
         opcode = bytes.fromhex("b5b2")
-        bad_opcode = bytes.fromhex("a841")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_random_bitwise_and")
     def test_random_bitwise_and(self, mock_method):
         opcode = bytes.fromhex("c499")
-        bad_opcode = bytes.fromhex("b5b2")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_draw_sprite")
     def test_draw_sprite(self, mock_method):
         opcode = bytes.fromhex("d458")
-        bad_opcode = bytes.fromhex("c499")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_if_key_pressed")
     def test_if_key_pressed(self, mock_method):
         opcode = bytes.fromhex("e49e")
-        bad_opcode = bytes.fromhex("e4a1")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_if_key_not_pressed")
     def test_if_key_not_pressed(self, mock_method):
         opcode = bytes.fromhex("e4a1")
-        bad_opcode = bytes.fromhex("e49e")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_get_delay_timer")
     def test_get_delay_timer(self, mock_method):
         opcode = bytes.fromhex("f307")
-        bad_opcode = bytes.fromhex("c499")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_wait_for_key_press")
     def test_wait_for_key_press(self, mock_method):
         opcode = bytes.fromhex("f90a")
-        bad_opcode = bytes.fromhex("f307")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_delay_timer")
     def test_set_delay_timer(self, mock_method):
         opcode = bytes.fromhex("f315")
-        bad_opcode = bytes.fromhex("c499")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_sound_timer")
     def test_set_sound_timer(self, mock_method):
         opcode = bytes.fromhex("f318")
-        bad_opcode = bytes.fromhex("f315")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_register_i_addition")
     def test_register_i_addition(self, mock_method):
         opcode = bytes.fromhex("f71e")
-        bad_opcode = bytes.fromhex("f318")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_set_register_i_to_hex_sprite_address")
     def test_set_register_i_to_hex_sprite_address(self, mock_method):
         opcode = bytes.fromhex("f029")
-        bad_opcode = bytes.fromhex("f71e")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_binary_coded_decimal")
     def test_binary_coded_decimal(self, mock_method):
         opcode = bytes.fromhex("fc33")
-        bad_opcode = bytes.fromhex("f71e")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_register_dump")
     def test_register_dump(self, mock_method):
         opcode = bytes.fromhex("fc55")
-        bad_opcode = bytes.fromhex("fc65")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
 
     @mock.patch.object(Emulator, "opcode_register_load")
     def test_register_load(self, mock_method):
         opcode = bytes.fromhex("fc65")
-        bad_opcode = bytes.fromhex("fc55")
+        bad_opcode = bytes.fromhex("f000")
         self.run_opcode(opcode, bad_opcode, mock_method)
